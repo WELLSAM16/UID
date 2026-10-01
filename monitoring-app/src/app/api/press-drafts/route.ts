@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { requireUser } from "@/lib/authServer";
+import { isAdminRole } from "@/lib/roles";
 import {
   PRESS_RETENTION_DAYS,
   PRESS_SLA_DAYS,
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
     const db = getAdminDb();
     let q: FirebaseFirestore.Query = db.collection(COLLECTION);
 
-    if (u.role !== "admin" || mineOnly) {
+    if (!isAdminRole(u.role) || mineOnly) {
       q = q.where("authorUid", "==", u.uid);
     }
     // Tanpa orderBy di query (hindari composite index); sort di memori.
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Draft asal tidak ditemukan" }, { status: 404 });
       }
       const src = srcSnap.data() as PressDraftDoc;
-      if (u.role !== "admin" && src.authorUid !== u.uid) {
+      if (!isAdminRole(u.role) && src.authorUid !== u.uid) {
         return NextResponse.json({ error: "Forbidden: bukan milik Anda" }, { status: 403 });
       }
       const eff = pressEffectiveStatus(src);

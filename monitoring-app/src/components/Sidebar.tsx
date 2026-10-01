@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/authContext";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { ROLE_LABELS } from "@/lib/roles";
 
 interface SubMenu {
   name: string;
@@ -31,6 +32,7 @@ const MENUS: MainMenu[] = [
       { name: "Draf Saya", href: "/dashboard/drafts", icon: "📝", desc: "Buat rencana postingan" },
       { name: "Review Draf", href: "/admin/drafts", icon: "✅", desc: "Validasi ajuan user", adminOnly: true },
       { name: "Kelola Target", href: "/admin/target", icon: "⚙️", desc: "Atur target tiap akun", adminOnly: true },
+      { name: "Kelola Pengguna", href: "/admin/users", icon: "👥", desc: "NIP, role & status akun", adminOnly: true },
     ],
   },
   {
@@ -70,7 +72,7 @@ function itemStyle(isActive: boolean): React.CSSProperties {
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "administrator" || user?.role === "admin_uid" || user?.role === "admin";
   // Default: semua menu utama tertutup; hanya terbuka saat diklik,
   // atau otomatis saat salah satu sub menu-nya sedang aktif.
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -93,7 +95,9 @@ export default function Sidebar() {
             <img src="/pln.svg" alt="Logo PLN" style={{ width: "130px", height: "auto", display: "block" }} />
             <div style={{ marginTop: "8px", fontSize: "1.25rem", fontWeight: 700, color: "#111", whiteSpace: "nowrap" }}>UP3 Bintaro</div>
             <p style={{ fontSize: "0.8rem", marginTop: "5px" }}>
-              Role: <span style={{ color: isAdmin ? "var(--danger)" : "var(--success)", fontWeight: "bold", textTransform: "capitalize" }}>{user?.role}</span>
+              Role: <span style={{ color: isAdmin ? "var(--danger)" : "var(--success)", fontWeight: "bold" }}>{ROLE_LABELS[user?.role || ""] || user?.role}</span>
+              {user?.nip && <span style={{ color: "var(--text-muted)" }}> • {user.nip}</span>}
+              {user?.unitId && <span style={{ color: "var(--text-muted)" }}> • {user.unitId}</span>}
             </p>
           </div>
           <button className="sidebar-toggle" onClick={() => setMobileOpen((o) => !o)} aria-label="Buka/tutup menu navigasi">

@@ -2,54 +2,64 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/authContext";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const { login, loading } = useAuth();
-  const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [nip, setNip] = useState("");
   const [password, setPassword] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      alert("Masukkan email dan password");
+    if (!nip || !password) {
+      setError("Masukkan NIP/email dan password");
       return;
     }
     try {
       setIsLoggingIn(true);
-      await login(email, password);
-    } catch (error) {
-       // Error handled in authContext
-       setIsLoggingIn(false);
+      setError(null);
+      await login(nip, password);
+    } catch (err: any) {
+      setError(err.message || "Login gagal.");
+      setIsLoggingIn(false);
     }
   };
 
   if (loading) {
     return (
-       <div className="container flex-center" style={{ minHeight: "100vh" }}>
-          <p>Loading Authentication...</p>
-       </div>
+      <div className="container flex-center" style={{ minHeight: "100vh" }}>
+        <p>Loading Authentication...</p>
+      </div>
     );
   }
 
   return (
     <div className="container flex-center" style={{ minHeight: "100vh" }}>
       <div className="glass-panel" style={{ padding: "40px", width: "100%", maxWidth: "400px", textAlign: "center" }}>
-        <h2 style={{ fontSize: "2rem", marginBottom: "20px", color: "#111" }}>
-          Login ke Dashboard
+        <h2 style={{ fontSize: "2rem", marginBottom: "8px", color: "#111" }}>
+          Login
         </h2>
-        
-        <div style={{ marginBottom: "20px", textAlign: "left" }}>
+        <p style={{ marginBottom: "24px", fontSize: "0.9rem" }}>
+          Gunakan NIP yang didaftarkan admin (administrator dapat memakai email)
+        </p>
+
+        {error && (
+          <div style={{ marginBottom: "16px", padding: "10px 14px", borderRadius: "8px", fontSize: "0.875rem", background: "rgba(239, 68, 68, 0.1)", color: "var(--danger)", textAlign: "left" }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ marginBottom: "16px", textAlign: "left" }}>
           <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-muted)" }}>
-            Email
+            NIP / Email
           </label>
           <input
-            type="email"
+            type="text"
             className="input-field"
-            placeholder="nama@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder="NIP, atau email khusus admin"
+            value={nip}
+            onChange={(e) => setNip(e.target.value.trimStart())}
+            onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }}
           />
         </div>
 
@@ -60,9 +70,10 @@ export default function LoginPage() {
           <input
             type="password"
             className="input-field"
-            placeholder="Minimal 6 karakter"
+            placeholder="Password dari admin"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }}
           />
         </div>
 
@@ -78,7 +89,7 @@ export default function LoginPage() {
         </div>
 
         <p style={{ marginTop: "20px", fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: "1.5" }}>
-          *Akun baru otomatis dibuat dengan role User. Untuk menjadikan admin, minta admin eksisting jalankan scripts/make-admin.js.
+          *Belum punya akun? Minta administrator mendaftarkan NIP Anda terlebih dahulu.
         </p>
       </div>
     </div>

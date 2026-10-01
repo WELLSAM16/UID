@@ -2,23 +2,28 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users: read own doc; create own doc as "user" only; update/delete admin-only.
-    // Role promotion must go through Admin SDK (scripts/make-admin.js), not client.
+    // Tahap 1 — akun & role UID Jaya (login NIP, tanpa self-register).
+    // Dokumen users hanya ditulis via Admin SDK (/api/users); client hanya
+    // boleh membaca milik sendiri + menandai mustChangePassword milik sendiri
+    // setelah ganti password. Admin (administrator/admin_uid) boleh list semua.
+    function isAdminRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"];
+    }
     match /users/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow create: if request.auth != null
-        && request.auth.uid == uid
-        && request.resource.data.role == "user";
-      allow update, delete: if request.auth != null
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+      allow read: if request.auth != null
+        && (request.auth.uid == uid || isAdminRole());
+      allow create: if false;
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["mustChangePassword"])
+        && request.resource.data.mustChangePassword == false;
+      allow delete: if false;
     }
 
     // Monitoring data: any signed-in user can read; only admin can write.
     match /monitored_accounts/{doc} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+      allow write: if request.auth != null && isAdminRole();
     }
 
     // Draft workflow 2 tahap: owner + admin, SLA 7 hari + retensi TTL 90 hari.
@@ -33,7 +38,7 @@ service cloud.firestore {
         && request.resource.data.status == "draft";
       allow read: if request.auth != null
         && (resource.data.authorUid == request.auth.uid
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin");
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"]);
       allow update: if request.auth != null
         && resource.data.status != "expired"
         && request.resource.data.status != "expired"
@@ -44,18 +49,18 @@ service cloud.firestore {
           && resource.data.status in ["draft", "rejected"]
           && request.resource.data.status in ["draft", "pending"])
         // Admin reviews pending drafts (belum lewat SLA, bukan karya sendiri)
-        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"]
           && resource.data.status == "pending"
           && request.resource.data.status in ["approved", "rejected"]
           && resource.data.authorUid != request.auth.uid
           && (resource.data.slaExpiresAt == null || request.time < resource.data.slaExpiresAt))
         // Admin publishes approved drafts
-        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"]
           && resource.data.status == "approved"
           && request.resource.data.status == "published")
       );
       allow delete: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"]
         || (resource.data.authorUid == request.auth.uid
           && resource.data.status in ["draft", "rejected"])
       );
@@ -66,7 +71,7 @@ service cloud.firestore {
     match /skoring_targets/{targetId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"];
     }
 
     // Draf press release: pola sama seperti content_drafts (SLA 7 hari + TTL 90 hari).
@@ -76,7 +81,7 @@ service cloud.firestore {
         && request.resource.data.status == "draft";
       allow read: if request.auth != null
         && (resource.data.authorUid == request.auth.uid
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin");
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"]);
       allow update: if request.auth != null
         && resource.data.status != "expired"
         && request.resource.data.status != "expired"
@@ -85,17 +90,17 @@ service cloud.firestore {
         (resource.data.authorUid == request.auth.uid
           && resource.data.status in ["draft", "rejected"]
           && request.resource.data.status in ["draft", "pending"])
-        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"]
           && resource.data.status == "pending"
           && request.resource.data.status in ["approved", "rejected"]
           && resource.data.authorUid != request.auth.uid
           && (resource.data.slaExpiresAt == null || request.time < resource.data.slaExpiresAt))
-        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"]
           && resource.data.status == "approved"
           && request.resource.data.status == "published")
       );
       allow delete: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"]
         || (resource.data.authorUid == request.auth.uid
           && resource.data.status in ["draft", "rejected"])
       );
@@ -107,7 +112,7 @@ service cloud.firestore {
     match /press_release_sources/{sourceId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"];
     }
 
     // Default deny everything else.

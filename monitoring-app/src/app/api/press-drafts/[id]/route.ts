@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { requireUser } from "@/lib/authServer";
+import { isAdminRole } from "@/lib/roles";
 import {
   PRESS_RETENTION_DAYS,
   PRESS_SLA_DAYS,
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest, ctx: Ctx) {
   try {
     const { data } = await loadDraft(id);
     if (!data) return NextResponse.json({ error: "Draft tidak ditemukan" }, { status: 404 });
-    if (u.role !== "admin" && data.authorUid !== u.uid) {
+    if (!isAdminRole(u.role) && data.authorUid !== u.uid) {
       return NextResponse.json({ error: "Forbidden: bukan milik Anda" }, { status: 403 });
     }
     return NextResponse.json({ draft: toResponse(id, data) });
@@ -95,7 +96,7 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
 
     const t = nowISO();
     const isOwner = data.authorUid === u.uid;
-    const isAdmin = u.role === "admin";
+    const isAdmin = isAdminRole(u.role);
 
     if (action === "update") {
       if (!isOwner && !isAdmin) {
@@ -253,7 +254,7 @@ export async function DELETE(request: NextRequest, ctx: Ctx) {
     const { ref, data } = await loadDraft(id);
     if (!data) return NextResponse.json({ error: "Draft tidak ditemukan" }, { status: 404 });
 
-    if (u.role === "admin") {
+    if (isAdminRole(u.role)) {
       await ref.delete();
       return NextResponse.json({ ok: true });
     }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/authContext";
+import { isAdminRole } from "@/lib/roles";
 import { useRouter } from "next/navigation";
 
 interface Post {
@@ -81,10 +82,10 @@ function FormatBadge({ mediaType }: { mediaType: string }) {
 
 function MetricBox({ label, value, color }: { label: string; value: number | string; color: string }) {
   return (
-    <div className="glass-card" style={{
-      padding: "20px 24px",
-      flex: 1,
-      minWidth: "140px",
+    <div className="glass-card kpi-card" style={{
+      padding: "18px 20px",
+      width: "100%",
+      minWidth: 0,
       position: "relative",
       overflow: "hidden",
       borderLeft: `4px solid ${color}`
@@ -97,12 +98,13 @@ function MetricBox({ label, value, color }: { label: string; value: number | str
         opacity: 0.15,
         filter: "blur(25px)",
         borderRadius: "50%",
-        transform: "translate(30%, -30%)"
+        transform: "translate(30%, -30%)",
+        pointerEvents: "none"
       }}></div>
-      <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "8px", fontWeight: 500, letterSpacing: "0.03em" }}>
+      <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "8px", fontWeight: 500, letterSpacing: "0.03em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {label}
       </div>
-      <div style={{ fontSize: "clamp(1.4rem, 7vw, 2rem)", fontWeight: 700, color: "#111", overflowWrap: "anywhere" }}>
+      <div className="kpi-value" style={{ fontWeight: 700, color: "#111", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" }}>
         {typeof value === "number" ? value.toLocaleString("id-ID") : value}
       </div>
     </div>
@@ -112,7 +114,7 @@ function MetricBox({ label, value, color }: { label: string; value: number | str
 export default function Dashboard() {
   const { user, loading: authLoading, getToken } = useAuth();
   const router = useRouter();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = isAdminRole(user?.role);
   const [posts, setPosts] = useState<Post[]>([]);
   const [availableAccounts, setAvailableAccounts] = useState<string[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>("Semua Akun");
@@ -403,8 +405,8 @@ export default function Dashboard() {
       </section>
 
       {/* Ringkasan Metrik (mengikuti filter) */}
-      <section style={{ marginBottom: "40px" }}>
-        <div className="kpi-row" style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+      <section style={{ marginBottom: "32px" }}>
+        <div className="kpi-row">
           <MetricBox label="Total Postingan" value={filteredPosts.length} color="#38bdf8" />
           <MetricBox label="Total Skor" value={Math.round(totalScore)} color="#38bdf8" />
           <MetricBox label="Total Jangkauan" value={totalReach} color="#38bdf8" />
@@ -417,21 +419,21 @@ export default function Dashboard() {
 
       {/* Tren Skor per Bulan */}
       <section style={{ marginBottom: "32px" }}>
-        <div className="glass-panel" style={{ padding: "20px 24px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "8px", marginBottom: "16px" }}>
-            <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700 }}>Tren Skor per Bulan</h2>
-            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+        <div className="glass-panel trend-panel" style={{ padding: "24px 28px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "8px", marginBottom: "20px" }}>
+            <h2 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>Tren Skor per Bulan</h2>
+            <div style={{ fontSize: "0.83rem", color: "var(--text-muted)" }}>
               Mengikuti filter akun{selectedAccount !== "Semua Akun" ? ` (${accountLabel(selectedAccount)})` : ""} • geser untuk histori penuh
             </div>
           </div>
           {monthlyTrend.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "24px", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+            <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-muted)", fontSize: "0.9rem" }}>
               Tidak ada data pada filter ini.
             </div>
           ) : (
-            <div style={{ display: "flex", alignItems: "flex-end", gap: "10px", overflowX: "auto", paddingBottom: "8px", minHeight: "190px" }}>
+            <div className="trend-scroll" style={{ display: "flex", alignItems: "flex-end", gap: "14px", overflowX: "auto", paddingBottom: "12px", minHeight: "250px" }}>
               {monthlyTrend.map(([key, val]) => {
-                const h = maxTrendScore > 0 ? Math.max(4, Math.round((val.score / maxTrendScore) * 130)) : 4;
+                const h = maxTrendScore > 0 ? Math.max(10, Math.round((val.score / maxTrendScore) * 170)) : 10;
                 const isSel = selectedMonth === key;
                 const short = new Date(Number(key.slice(0, 4)), Number(key.slice(5)) - 1, 1)
                   .toLocaleDateString("id-ID", { month: "short", year: "2-digit" });
@@ -440,21 +442,23 @@ export default function Dashboard() {
                     key={key}
                     title={`${monthLabel(key)}: ${Math.round(val.score).toLocaleString("id-ID")} skor dari ${val.count} postingan`}
                     onClick={() => { setSelectedMonth(isSel ? "" : key); setCurrentPage(1); }}
-                    style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", minWidth: "52px", cursor: "pointer", flexShrink: 0 }}
+                    className="trend-bar"
+                    style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: "8px", minWidth: "64px", cursor: "pointer", flexShrink: 0, minHeight: "220px" }}
                   >
-                    <div style={{ fontSize: "0.65rem", fontWeight: 700, color: isSel ? "var(--primary)" : "var(--text-muted)", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: "0.72rem", fontWeight: 700, color: isSel ? "var(--primary)" : "var(--text-muted)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                       {Math.round(val.score).toLocaleString("id-ID")}
                     </div>
                     <div style={{
-                      width: "30px",
+                      width: "38px",
                       height: `${h}px`,
-                      borderRadius: "6px 6px 2px 2px",
-                      background: isSel ? "#38bdf8" : "#10b981",
-                      opacity: isSel ? 1 : 0.85,
+                      borderRadius: "8px 8px 3px 3px",
+                      background: isSel ? "#38bdf8" : "linear-gradient(180deg, #34d399 0%, #10b981 100%)",
+                      opacity: isSel ? 1 : 0.9,
                       outline: isSel ? "2px solid #38bdf8" : "none",
                       outlineOffset: "2px",
+                      transition: "height 0.3s ease, background 0.2s ease",
                     }}></div>
-                    <div style={{ fontSize: "0.65rem", color: isSel ? "var(--primary)" : "var(--text-muted)", fontWeight: isSel ? 700 : 400, whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: "0.72rem", color: isSel ? "var(--primary)" : "var(--text-muted)", fontWeight: isSel ? 700 : 500, whiteSpace: "nowrap" }}>
                       {short}
                     </div>
                   </div>
@@ -619,6 +623,37 @@ export default function Dashboard() {
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+        /* ===== Desktop-first KPI grid (mobile tetap 2 kolom via media query) ===== */
+        .kpi-row {
+          display: grid;
+          gap: 16px;
+          grid-template-columns: repeat(7, minmax(0, 1fr));
+        }
+        .kpi-card .kpi-value {
+          font-size: 1.65rem;
+        }
+        /* Layar < 1280px: 4 kolom — cegah angka 8 digit pecah baris */
+        @media (max-width: 1280px) {
+          .kpi-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        }
+        /* Tablet: 3 kolom */
+        @media (max-width: 900px) {
+          .kpi-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+          .kpi-card .kpi-value { font-size: 1.4rem; }
+        }
+        /* HP: 2 kolom (tetap ringkas, tidak setinggi 7 baris vertikal) */
+        @media (max-width: 600px) {
+          .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+          .kpi-card .kpi-value { font-size: 1.25rem; }
+          .trend-panel { padding: 20px !important; }
+          .trend-scroll { min-height: 200px !important; }
+          .trend-bar { min-width: 52px !important; min-height: 170px !important; }
+        }
+        /* Scrollbar halus untuk tren di desktop */
+        .trend-scroll::-webkit-scrollbar { height: 8px; }
+        .trend-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 999px; }
+        .trend-scroll::-webkit-scrollbar-track { background: transparent; }
+        .trend-bar:hover > div:nth-child(2) { filter: brightness(1.08); }
       `}</style>
     </div>
   );

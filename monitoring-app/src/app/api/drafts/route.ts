@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { requireUser } from "@/lib/authServer";
+import { isAdminRole } from "@/lib/roles";
 import {
   DraftDoc,
   DraftStatus,
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
 
     // Non-admin selalu dibatasi milik sendiri di query.
     // Admin default semua; ?mine=true membatasi ke milik sendiri.
-    if (u.role !== "admin" || mineOnly) {
+    if (!isAdminRole(u.role) || mineOnly) {
       q = q.where("authorUid", "==", u.uid);
     }
     // SENGAJA tanpa orderBy di query: kombinasi where + orderBy butuh
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Draft asal tidak ditemukan" }, { status: 404 });
       }
       const src = srcSnap.data() as DraftDoc;
-      if (u.role !== "admin" && src.authorUid !== u.uid) {
+      if (!isAdminRole(u.role) && src.authorUid !== u.uid) {
         return NextResponse.json({ error: "Forbidden: bukan milik Anda" }, { status: 403 });
       }
       const eff = effectiveStatus(src);

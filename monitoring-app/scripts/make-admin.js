@@ -1,19 +1,25 @@
 // scripts/make-admin.js
 // ─────────────────────────
-// Promote/demote user role via Admin SDK (bypass Firestore rules).
-// Hanya dijalankan oleh operator yang memegang service account.
+// Kelola role user via Admin SDK (bypass Firestore rules) — Tahap 1.
+// Mendukung role baru UID Jaya + akun NIP.
 //
 // Cara pakai:
-//   node scripts/make-admin.js <email> [admin|user]
+//   node scripts/make-admin.js <email|NIP> [staff|team_leader|asman|admin_uid|administrator|admin|user] [unitId]
+//   node scripts/make-admin.js 12345678 administrator uid
 //   node scripts/make-admin.js suwito@gmail.com admin
 //
-// Lookup user by email via Auth, lalu set users/{uid} { role, email }.
+// Lookup user by email via Auth, lalu set users/{uid} { role, email, ... }.
 
 const { readFileSync } = require("fs");
 const { join } = require("path");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
-const { getAuth } = require("firebase-admin/auth");
+// SENGAJA tidak memakai firebase-admin/auth: modul itu menarik jwks-rsa yang
+// me-require jose v6 (ESM-only) → ERR_REQUIRE_ESM. UID dicari via Firestore
+// (koleksi users), yang adalah sumber kebenaran role di sistem ini.
+
+const NIP_EMAIL_DOMAIN = "uidjaya.pln.co.id";
+const VALID_ROLES = ["staff", "team_leader", "asman", "admin_uid", "administrator", "admin", "user"];
 
 function loadEnv() {
   const envPath = join(__dirname, "..", ".env.local");
@@ -34,17 +40,28 @@ function loadEnv() {
   return env;
 }
 
+function toEmail(input) {
+  // NIP murni digit -> petakan ke email internal.
+  if (/^[0-9]{4,32}$/.test(input)) return `${input}@${NIP_EMAIL_DOMAIN}`;
+  return input;
+}
+
 async function main() {
-  const email = process.argv[2];
-  const role = process.argv[3] || "admin";
-  if (!email) {
-    console.error("Usage: node scripts/make-admin.js <email> [admin|user]");
+  const input = process.argv[2];
+  const role = process.argv[3] || "administrator";
+  const unitId = process.argv[4] || null;
+  if (!input) {
+    console.error("Usage: node scripts/make-admin.js <email|NIP> [role] [unitId]");
+    console.error("Roles:", VALID_ROLES.join(", "));
     process.exit(1);
   }
-  if (!["admin", "user"].includes(role)) {
-    console.error("Role harus admin atau user");
+  if (!VALID_ROLES.includes(role)) {
+    console.error("Role harus salah satu:", VALID_ROLES.join(", "));
     process.exit(1);
   }
+
+  const email = toEmail(input);
+  const nip = /^[0-9]{4,32}$/.test(input) ? input : null;
 
   const env = loadEnv();
   const projectId = env.FIREBASE_PROJECT_ID;
@@ -59,15 +76,32 @@ async function main() {
     initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
   }
 
-  const auth = getAuth();
   const db = getFirestore();
 
-  const user = await auth.getUserByEmail(email);
-  await db.collection("users").doc(user.uid).set(
-    { email: user.email, role, updatedAt: new Date().toISOString() },
+  // Cari UID via Firestore: cocokkan email dulu, lalu NIP bila ada.
+  let uid = null;
+  const byEmail = await db.collection("users").where("email", "==", email).limit(1).get();
+  if (!byEmail.empty) {
+    uid = byEmail.docs[0].id;
+  } else if (nip) {
+    const byNip = await db.collection("users").where("nip", "==", nip).limit(1).get();
+    if (!byNip.empty) uid = byNip.docs[0].id;
+  }
+  if (!uid) {
+    console.error(`Akun ${email} tidak ditemukan di koleksi users. Daftarkan dulu via halaman /admin/users.`);
+    process.exit(1);
+  }
+  await db.collection("users").doc(uid).set(
+    {
+      email,
+      ...(nip ? { nip } : {}),
+      ...(unitId ? { unitId } : {}),
+      role,
+      updatedAt: new Date().toISOString(),
+    },
     { merge: true }
   );
-  console.log(`OK: ${email} (${user.uid}) -> role=${role}`);
+  console.log(`OK: ${email} (${uid}) -> role=${role}${unitId ? ` unit=${unitId}` : ""}`);
 }
 
 main().catch((err) => {

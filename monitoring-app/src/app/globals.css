@@ -106,9 +106,11 @@ a {
     padding: 20px !important;
   }
 
-  /* Baris kartu KPI selalu menumpuk vertikal penuh di HP */
+  /* Baris kartu KPI: grid 2 kolom di HP (diatur per halaman; jangan paksa vertikal penuh) */
   .kpi-row {
-    flex-direction: column !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
   }
 
   /* Deretan tab filter jadi dropdown di HP */

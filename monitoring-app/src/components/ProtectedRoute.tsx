@@ -3,16 +3,33 @@
 import { useAuth } from "@/lib/authContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import type { Role } from "@/lib/roles";
 
 export default function ProtectedRoute({
   children,
   requireAdmin = false,
+  allowedRoles,
 }: {
   children: React.ReactNode;
+  /** Legacy: true = hanya administrator / admin_uid. */
   requireAdmin?: boolean;
+  /** Baru: batasi ke role tertentu (administrator selalu lolos). */
+  allowedRoles?: Role[];
 }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+
+  const isAllowed = (role: string | undefined | null) => {
+    if (!role) return false;
+    if (allowedRoles && allowedRoles.length > 0) {
+      if (role === "administrator" || role === "admin") return true;
+      return allowedRoles.includes(role as Role);
+    }
+    if (requireAdmin) {
+      return role === "administrator" || role === "admin_uid" || role === "admin";
+    }
+    return true;
+  };
 
   useEffect(() => {
     if (loading) return; // Wait for Firebase Auth to initialize
@@ -22,11 +39,17 @@ export default function ProtectedRoute({
       return;
     }
 
-    if (requireAdmin && user.role !== "admin") {
-      alert("Akses Ditolak: Halaman ini hanya untuk Admin.");
+    if (user.mustChangePassword) {
+      router.replace("/ganti-password");
+      return;
+    }
+
+    if (!isAllowed(user.role)) {
+      alert("Akses Ditolak: role Anda tidak diizinkan membuka halaman ini.");
       router.replace("/beranda");
     }
-  }, [user, loading, router, requireAdmin]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loading, router, requireAdmin, allowedRoles?.join(",")]);
 
   // Show a loading state while Firebase checks auth
   if (loading) {
@@ -38,7 +61,12 @@ export default function ProtectedRoute({
   }
 
   // Prevent rendering children if unauthorized (avoids flicker before redirect)
-  if (!user || (requireAdmin && user.role !== "admin")) {
+  if (!user || !isAllowed(user.role)) {
+    return null;
+  }
+
+  // Paksa ganti password awal sebelum bisa membuka halaman lain.
+  if (user.mustChangePassword) {
     return null;
   }
 
