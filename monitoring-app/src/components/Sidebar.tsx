@@ -23,6 +23,7 @@ interface MainMenu {
 
 const MENUS: MainMenu[] = [
   { name: "Beranda", icon: "🏠", href: "/beranda" },
+  { name: "Profil", icon: "👤", href: "/profil" },
   { name: "EVP", icon: "🤝", href: "/evp" },
   {
     name: "Medsos",
@@ -32,7 +33,6 @@ const MENUS: MainMenu[] = [
       { name: "Draf Saya", href: "/dashboard/drafts", icon: "📝", desc: "Buat rencana postingan" },
       { name: "Review Draf", href: "/admin/drafts", icon: "✅", desc: "Validasi ajuan user", adminOnly: true },
       { name: "Kelola Target", href: "/admin/target", icon: "⚙️", desc: "Atur target tiap akun", adminOnly: true },
-      { name: "Kelola Pengguna", href: "/admin/users", icon: "👥", desc: "NIP, role & status akun", adminOnly: true },
     ],
   },
   {
@@ -50,6 +50,13 @@ const MENUS: MainMenu[] = [
     icon: "💰",
     children: [
       { name: "Monitoring PUMK", href: "/pumk/monitoring", icon: "📉", desc: "Tunggakan UP3 Bintaro dari database UID" },
+    ],
+  },
+  {
+    name: "Administrator",
+    icon: "🛡️",
+    children: [
+      { name: "Kelola Pengguna", href: "/admin/users", icon: "👥", desc: "NIP, role & status akun", adminOnly: true },
     ],
   },
 ];
