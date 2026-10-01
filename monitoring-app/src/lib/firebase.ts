@@ -3,13 +3,17 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBMHaKr1Fc4mZ8g2TC7JbR0vF7gcyxj4F8",
-  authDomain: "monitoring-dashboard-11a1a.firebaseapp.com",
-  projectId: "monitoring-dashboard-11a1a",
-  storageBucket: "monitoring-dashboard-11a1a.firebasestorage.app",
-  messagingSenderId: "906415110043",
-  appId: "1:906415110043:web:ab154b34893e6a973b933e",
-  measurementId: "G-VH89NQED58"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyBG3SyQz2Lnj-20p57yilt9giJYFGSs6PIs",
+  authDomain:
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "offering-ke-uid.firebaseapp.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "offering-ke-uid",
+  storageBucket:
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+    "offering-ke-uid.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "346552860473",
+  appId:
+    process.env.NEXT_PUBLIC_FIREBASE_APP_ID ||
+    "1:346552860473:web:ca4d10f21d26b28ff072e8",
 };
 
 // Initialize Firebase (Singleton pattern for Next.js)
