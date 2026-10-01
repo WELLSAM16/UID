@@ -39,3 +39,8 @@ Tanggal: 30 Sep 2026. Branch: `tahap-1-fondasi-akun` (dari `master` via `fix-das
 - Deploy `firestore.rules` manual via `firebase deploy --only firestore:rules`.
 - Bootstrap admin pertama: `node scripts/make-admin.js samuelsihombing160405@gmail.com administrator uid`.
 - Urutan uji: NIP tak terdaftar ditolak → admin buat Staff → Staff dipaksa ganti password → role lain tidak bisa buka `/admin/*`.
+
+## 7. Ide parkir (diskusi 1 Okt 2026, belum dibangun)
+- Kelola Pengguna hanya soft-delete (nonaktifkan) — hapus permanen DITOLAK untuk akun ber-riwayat (jaga atribusi draf + audit).
+- Opsi masa depan bila dibutuhkan: hapus permanen HANYA untuk akun `● PW AWAL` (belum pernah login) + nol draf + konfirmasi ketik NIP.
+- Alternatif prioritas: filter/toggle "sembunyikan akun nonaktif" di tabel agar daftar bersih tanpa buang data.
