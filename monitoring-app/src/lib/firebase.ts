@@ -3,17 +3,17 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyBG3SyQz2Lnj-20p57yilt9giJYFGSs6PIs",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyAseib814caNATAyWH2aa74Iie6ic-cnJw",
   authDomain:
-    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "offering-ke-uid.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "offering-ke-uid",
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "offering-uid.firebaseapp.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "offering-uid",
   storageBucket:
     process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
-    "offering-ke-uid.firebasestorage.app",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "346552860473",
+    "offering-uid.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "530604694687",
   appId:
     process.env.NEXT_PUBLIC_FIREBASE_APP_ID ||
-    "1:346552860473:web:ca4d10f21d26b28ff072e8",
+    "1:530604694687:web:42995253df8c0d739116aa",
 };
 
 // Initialize Firebase (Singleton pattern for Next.js)
