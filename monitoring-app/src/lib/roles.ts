@@ -70,11 +70,11 @@ export function normalizeRole(role: string | undefined): Role {
   return "staff";
 }
 
-/** NIP PLN (Prev.Per.No): 4-32 digit, boleh diakhiri 1-2 huruf (cth: 7191037J). */
+/** NIP PLN (Prev.Per.No): 4-32 digit, boleh diakhiri 1-3 huruf (cth: 7191037J). */
 export function validateNip(nip: string): string | null {
   const v = (nip || "").trim().toUpperCase();
-  if (!/^[0-9]{4,32}[A-Z]{0,2}$/.test(v))
-    return "NIP harus 4-32 digit angka, boleh diakhiri 1-2 huruf (cth: 7191037J)";
+  if (!/^[0-9]{4,32}[A-Z]{0,3}$/.test(v))
+    return "NIP harus 4-32 digit angka, boleh diakhiri 1-3 huruf (cth: 7191037J)";
   return null;
 }
 
