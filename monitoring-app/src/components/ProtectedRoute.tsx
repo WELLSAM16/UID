@@ -9,12 +9,15 @@ export default function ProtectedRoute({
   children,
   requireAdmin = false,
   allowedRoles,
+  allowMustChangePassword = false,
 }: {
   children: React.ReactNode;
   /** Legacy: true = hanya administrator / admin_uid. */
   requireAdmin?: boolean;
   /** Baru: batasi ke role tertentu (administrator selalu lolos). */
   allowedRoles?: Role[];
+  /** True = halaman ini justru tempat menuntaskan wajib ganti password. */
+  allowMustChangePassword?: boolean;
 }) {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -39,7 +42,7 @@ export default function ProtectedRoute({
       return;
     }
 
-    if (user.mustChangePassword) {
+    if (user.mustChangePassword && !allowMustChangePassword) {
       router.replace("/ganti-password");
       return;
     }
@@ -65,8 +68,9 @@ export default function ProtectedRoute({
     return null;
   }
 
-  // Paksa ganti password awal sebelum bisa membuka halaman lain.
-  if (user.mustChangePassword) {
+  // Paksa ganti password awal sebelum bisa membuka halaman lain
+  // (kecuali halaman ganti-password itu sendiri).
+  if (user.mustChangePassword && !allowMustChangePassword) {
     return null;
   }
 

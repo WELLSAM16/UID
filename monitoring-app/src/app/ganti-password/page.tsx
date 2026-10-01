@@ -97,7 +97,7 @@ function GantiPasswordForm() {
 
 export default function GantiPasswordPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowMustChangePassword>
       <GantiPasswordForm />
     </ProtectedRoute>
   );
