@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users: read own doc; create own doc as "user" only; update/delete admin-only.
+    // Role promotion must go through Admin SDK (scripts/make-admin.js), not client.
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.role == "user";
+      allow update, delete: if request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // Monitoring data: any signed-in user can read; only admin can write.
+    match /monitored_accounts/{doc} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // Draft workflow 2 tahap: owner + admin, SLA 7 hari + retensi TTL 90 hari.
+    // Tahap 1 (SLA): pending -> expired otomatis (lazy di API) bila lewat slaExpiresAt.
+    // Tahap 2 (retensi): approved/rejected/published/expired dihapus via TTL
+    //   pada field retentionExpiresAt (penghapusan TTL oleh sistem, bypass rules).
+    // expired adalah status terminal: tidak ada transisi client dari/ke expired
+    // (duplikat dilakukan via API membuat dokumen BARU).
+    match /content_drafts/{draftId} {
+      allow create: if request.auth != null
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.status == "draft";
+      allow read: if request.auth != null
+        && (resource.data.authorUid == request.auth.uid
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin");
+      allow update: if request.auth != null
+        && resource.data.status != "expired"
+        && request.resource.data.status != "expired"
+        && request.resource.data.authorUid == resource.data.authorUid
+        && (
+        // Owner edits own draft while still draft/rejected
+        (resource.data.authorUid == request.auth.uid
+          && resource.data.status in ["draft", "rejected"]
+          && request.resource.data.status in ["draft", "pending"])
+        // Admin reviews pending drafts (belum lewat SLA, bukan karya sendiri)
+        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+          && resource.data.status == "pending"
+          && request.resource.data.status in ["approved", "rejected"]
+          && resource.data.authorUid != request.auth.uid
+          && (resource.data.slaExpiresAt == null || request.time < resource.data.slaExpiresAt))
+        // Admin publishes approved drafts
+        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+          && resource.data.status == "approved"
+          && request.resource.data.status == "published")
+      );
+      allow delete: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        || (resource.data.authorUid == request.auth.uid
+          && resource.data.status in ["draft", "rejected"])
+      );
+    }
+
+    // Target skoring: semua user login boleh baca; hanya admin boleh tulis.
+    // (Akses utama lewat API /api/targets; rules ini pengaman akses langsung.)
+    match /skoring_targets/{targetId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // Draf press release: pola sama seperti content_drafts (SLA 7 hari + TTL 90 hari).
+    match /press_release_drafts/{draftId} {
+      allow create: if request.auth != null
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.status == "draft";
+      allow read: if request.auth != null
+        && (resource.data.authorUid == request.auth.uid
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin");
+      allow update: if request.auth != null
+        && resource.data.status != "expired"
+        && request.resource.data.status != "expired"
+        && request.resource.data.authorUid == resource.data.authorUid
+        && (
+        (resource.data.authorUid == request.auth.uid
+          && resource.data.status in ["draft", "rejected"]
+          && request.resource.data.status in ["draft", "pending"])
+        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+          && resource.data.status == "pending"
+          && request.resource.data.status in ["approved", "rejected"]
+          && resource.data.authorUid != request.auth.uid
+          && (resource.data.slaExpiresAt == null || request.time < resource.data.slaExpiresAt))
+        || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+          && resource.data.status == "approved"
+          && request.resource.data.status == "published")
+      );
+      allow delete: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        || (resource.data.authorUid == request.auth.uid
+          && resource.data.status in ["draft", "rejected"])
+      );
+    }
+
+    // Sumber spreadsheet monitoring press release: semua user login boleh baca
+    // (untuk dropdown); hanya admin boleh tulis.
+    // (Akses utama lewat API /api/press-release-sources; rules ini pengaman akses langsung.)
+    match /press_release_sources/{sourceId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // Default deny everything else.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
