@@ -56,7 +56,7 @@ export default function LoginPage() {
           <input
             type="text"
             className="input-field"
-            placeholder="NIP, atau email khusus admin"
+            placeholder="cth NIP: 7191037J (admin: email)"
             value={nip}
             onChange={(e) => setNip(e.target.value.trimStart())}
             onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }}

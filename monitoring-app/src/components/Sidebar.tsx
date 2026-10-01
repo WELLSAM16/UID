@@ -94,6 +94,7 @@ export default function Sidebar() {
           <div>
             <img src="/pln.svg" alt="Logo PLN" style={{ width: "130px", height: "auto", display: "block" }} />
             <div style={{ marginTop: "8px", fontSize: "1.25rem", fontWeight: 700, color: "#111", whiteSpace: "nowrap" }}>UP3 Bintaro</div>
+            {user?.name && <div style={{ marginTop: "6px", fontSize: "0.9rem", fontWeight: 600, color: "#111" }}>{user.name}</div>}
             <p style={{ fontSize: "0.8rem", marginTop: "5px" }}>
               Role: <span style={{ color: isAdmin ? "var(--danger)" : "var(--success)", fontWeight: "bold" }}>{ROLE_LABELS[user?.role || ""] || user?.role}</span>
               {user?.nip && <span style={{ color: "var(--text-muted)" }}> • {user.nip}</span>}

@@ -70,15 +70,16 @@ export function normalizeRole(role: string | undefined): Role {
   return "staff";
 }
 
-/** NIP hanya digit, 4-32 karakter. */
+/** NIP PLN (Prev.Per.No): 4-32 digit, boleh diakhiri 1-2 huruf (cth: 7191037J). */
 export function validateNip(nip: string): string | null {
-  const v = (nip || "").trim();
-  if (!/^[0-9]{4,32}$/.test(v)) return "NIP harus 4-32 digit angka";
+  const v = (nip || "").trim().toUpperCase();
+  if (!/^[0-9]{4,32}[A-Z]{0,2}$/.test(v))
+    return "NIP harus 4-32 digit angka, boleh diakhiri 1-2 huruf (cth: 7191037J)";
   return null;
 }
 
 export function nipToEmail(nip: string): string {
-  return `${nip.trim()}@${NIP_EMAIL_DOMAIN}`;
+  return `${nip.trim().toUpperCase()}@${NIP_EMAIL_DOMAIN}`;
 }
 
 export function emailToNip(email: string | undefined | null): string | null {

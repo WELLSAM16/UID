@@ -175,7 +175,7 @@ export default function BerandaPage() {
         <div>
           <h1 style={{ fontSize: "2.2rem", margin: 0, color: "#111" }}>Beranda</h1>
           <p style={{ margin: "5px 0 0 0", color: "#111", overflowWrap: "anywhere" }}>
-            Halo, {user?.email || "pengguna"}
+            Halo, {user?.name || user?.nip || "pengguna"}
           </p>
         </div>
         <button className="btn" onClick={loadData} disabled={loading || !user}

@@ -41,8 +41,8 @@ function loadEnv() {
 }
 
 function toEmail(input) {
-  // NIP murni digit -> petakan ke email internal.
-  if (/^[0-9]{4,32}$/.test(input)) return `${input}@${NIP_EMAIL_DOMAIN}`;
+  // NIP PLN (digit + opsional 1-2 huruf akhir) -> petakan ke email internal.
+  if (/^[0-9]{4,32}[A-Za-z]{0,2}$/.test(input)) return `${input.toUpperCase()}@${NIP_EMAIL_DOMAIN}`;
   return input;
 }
 
@@ -61,7 +61,7 @@ async function main() {
   }
 
   const email = toEmail(input);
-  const nip = /^[0-9]{4,32}$/.test(input) ? input : null;
+  const nip = /^[0-9]{4,32}[A-Za-z]{0,2}$/.test(input) ? input.toUpperCase() : null;
 
   const env = loadEnv();
   const projectId = env.FIREBASE_PROJECT_ID;

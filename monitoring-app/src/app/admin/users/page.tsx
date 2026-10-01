@@ -188,7 +188,7 @@ export default function AdminUsersPage() {
         <div className="filter-bar" style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
           <div>
             <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>NIP</label>
-            <input className="input-field" inputMode="numeric" placeholder="12345678" value={nip} onChange={(e) => setNip(e.target.value.replace(/[^0-9]/g, ""))} style={{ minWidth: "150px" }} />
+            <input className="input-field" placeholder="7191037J" value={nip} onChange={(e) => setNip(e.target.value.replace(/[^0-9a-zA-Z]/g, "").toUpperCase())} style={{ minWidth: "150px" }} />
           </div>
           <div>
             <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Nama</label>
