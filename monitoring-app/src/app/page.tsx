@@ -1,32 +1,19 @@
-"use client";
+import Link from "next/link";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/authContext";
-
-/**
- * Laman pertama: teruskan sesuai status login.
- * - Sudah login -> /beranda (atau /ganti-password bila wajib ganti password).
- * - Belum login -> /login.
- */
 export default function Home() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (loading) return;
-    if (!user) {
-      router.replace("/login");
-    } else if (user.mustChangePassword) {
-      router.replace("/ganti-password");
-    } else {
-      router.replace("/beranda");
-    }
-  }, [user, loading, router]);
-
   return (
-    <div className="container flex-center" style={{ minHeight: "100vh" }}>
-      <p>Memuat...</p>
+    <div className="container flex-center" style={{ minHeight: "100vh", flexDirection: "column", gap: "20px" }}>
+      <div className="glass-panel" style={{ padding: "40px", textAlign: "center", maxWidth: "600px" }}>
+        <img src="/pln.svg" alt="Logo PLN" style={{ width: "170px", height: "auto", margin: "0 auto 20px auto", display: "block" }} />
+        <h1 style={{ fontSize: "2.5rem", marginBottom: "30px", color: "#111" }}>
+          KU UP3 Bintaro
+        </h1>
+        <div style={{ display: "flex", gap: "15px", justifyContent: "center" }}>
+          <Link href="/login">
+            <button className="btn" style={{ background: "#38bdf8", color: "white" }}>Go to Login</button>
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
