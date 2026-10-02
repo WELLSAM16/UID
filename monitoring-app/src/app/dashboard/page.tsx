@@ -219,7 +219,9 @@ export default function Dashboard() {
         throw new Error("Hanya admin yang boleh sync manual.");
       }
       if (!res.ok) {
-        throw new Error(`API ${res.status}: ${data.error || data.details || text.slice(0, 200)}`);
+        const detail = data.details ? ` — ${data.details}` : "";
+        const raw = !data.error && !data.details ? ` — ${text.slice(0, 300)}` : "";
+        throw new Error(`API ${res.status}: ${data.error || "Gagal sinkronisasi"}${detail}${raw}`);
       }
       setSyncMsg(`Sync sukses: ${data.fetched ?? "?"} ditarik, ${data.appended ?? 0} baru, ${data.updated ?? 0} refresh.`);
       await loadData();
