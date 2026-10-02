@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useRouter } from "next/navigation";
-import { ROLE_LABELS } from "@/lib/roles";
+import { ROLE_LABELS, UNIT_OPTIONS } from "@/lib/roles";
 
 interface ManagedUser {
   id: string;
@@ -86,6 +86,10 @@ export default function AdminUsersPage() {
   const handleCreate = async () => {
     if (!nip || !password) {
       setError("NIP dan password awal wajib diisi.");
+      return;
+    }
+    if ((role === "staff" || role === "team_leader" || role === "asman") && !unitId) {
+      setError("Unit wajib dipilih untuk Staff / Team Leader / Asman.");
       return;
     }
     try {
@@ -208,7 +212,12 @@ export default function AdminUsersPage() {
           </div>
           <div>
             <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Unit</label>
-            <input className="input-field" placeholder="bintaro / uid" value={unitId} onChange={(e) => setUnitId(e.target.value)} style={{ minWidth: "140px" }} />
+            <select className="input-field" value={unitId} onChange={(e) => setUnitId(e.target.value)} style={{ minWidth: "170px" }}>
+              <option value="">— Pilih unit —</option>
+              {UNIT_OPTIONS.map((u) => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Password awal</label>
@@ -275,14 +284,20 @@ export default function AdminUsersPage() {
                     </td>
                     <td style={{ padding: "13px 16px" }}>
                       {canEdit(u.role) ? (
-                        <input
+                        <select
                           className="input-field"
-                          defaultValue={u.unitId || ""}
-                          placeholder="unit"
-                          key={`${u.id}-${u.unitId}`}
-                          onBlur={(e) => { if (e.target.value !== (u.unitId || "")) handleUnitChange(u, e.target.value); }}
-                          style={{ padding: "6px 10px", fontSize: "0.8rem", minWidth: "110px" }}
-                        />
+                          value={(UNIT_OPTIONS as readonly string[]).includes(u.unitId || "") ? (u.unitId || "") : ""}
+                          onChange={(e) => handleUnitChange(u, e.target.value)}
+                          style={{ padding: "6px 10px", fontSize: "0.8rem", minWidth: "150px" }}
+                        >
+                          <option value="">— Pilih unit —</option>
+                          {!(UNIT_OPTIONS as readonly string[]).includes(u.unitId || "") && u.unitId ? (
+                            <option value={u.unitId || ""}>{u.unitId} (lama)</option>
+                          ) : null}
+                          {UNIT_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
                       ) : (
                         u.unitId || "-"
                       )}

@@ -55,6 +55,45 @@ export const MANAGEABLE_ROLES = [
   "administrator",
 ] as const;
 
+/** Satuan di bawah UID Jaya — dipakai sebagai dropdown Unit di Kelola Pengguna. */
+export const UNIT_OPTIONS = [
+  "UID",
+  "UP2D",
+  "UP3 BANDENGAN",
+  "UP3 BINTARO",
+  "UP3 BULUNGAN",
+  "UP3 CEMPAKA PUTIH",
+  "UP3 CENGKARENG",
+  "UP3 CIPUTAT",
+  "UP3 CIRACAS",
+  "UP3 JATINEGARA",
+  "UP3 KEBON JERUK",
+  "UP3 KRAMAT JATI",
+  "UP3 LENTENG AGUNG",
+  "UP3 MARUNDA",
+  "UP3 MENTENG",
+  "UP3 PONDOK GEDE",
+  "UP3 PONDOK KOPI",
+  "UP3 TANJUNG PRIOK",
+] as const;
+
+/**
+ * Normalisasi unitId ke salah satu UNIT_OPTIONS.
+ * - Menerima varian lama: "uid" -> "UID", "bintaro" -> "UP3 BINTARO".
+ * - Mengembalikan null bila kosong/tidak dikenal (artinya invalid).
+ */
+export function normalizeUnitId(input: string | undefined | null): string | null {
+  const v = (input || "").trim().toUpperCase().replace(/\s+/g, " ");
+  if (!v) return null;
+  if ((UNIT_OPTIONS as readonly string[]).includes(v)) return v;
+  if (v === "UID JAYA") return "UID";
+  for (const opt of UNIT_OPTIONS) {
+    // "BINTARO" -> "UP3 BINTARO", "CEMPAKA PUTIH" -> "UP3 CEMPAKA PUTIH"
+    if (opt.endsWith(v) || opt === `UP3 ${v}` || opt === `UP2D ${v}`) return opt;
+  }
+  return null;
+}
+
 /** Role lama -> role baru (kompatibilitas data existing). */
 export function normalizeRole(role: string | undefined): Role {
   if (role === "admin") return "administrator";

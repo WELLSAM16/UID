@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { adminUpdateAuthUser } from "@/lib/firebaseAuthAdmin";
 import { requireUser } from "@/lib/authServer";
-import { canManageRole, MANAGEABLE_ROLES, type Role } from "@/lib/roles";
+import { canManageRole, normalizeUnitId, MANAGEABLE_ROLES, type Role } from "@/lib/roles";
 
 function isUserManager(role: string | undefined) {
   return role === "administrator" || role === "admin_uid" || role === "admin";
@@ -47,7 +47,18 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
 
   const update: Record<string, unknown> = {};
   if (body.name !== undefined) update.name = String(body.name || "").trim() || current.name || "";
-  if (body.unitId !== undefined) update.unitId = String(body.unitId || "").trim() || null;
+  if (body.unitId !== undefined) {
+    const unitRaw = String(body.unitId || "").trim();
+    if (!unitRaw) {
+      update.unitId = null;
+    } else {
+      const normalized = normalizeUnitId(unitRaw);
+      if (!normalized) {
+        return NextResponse.json({ error: "Unit tidak valid — pilih dari daftar" }, { status: 400 });
+      }
+      update.unitId = normalized;
+    }
+  }
 
   if (body.role !== undefined) {
     const nextRole = String(body.role) as Role;

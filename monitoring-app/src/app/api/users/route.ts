@@ -6,6 +6,7 @@ import {
   validateNip,
   nipToEmail,
   canManageRole,
+  normalizeUnitId,
   MANAGEABLE_ROLES,
   type Role,
 } from "@/lib/roles";
@@ -70,7 +71,8 @@ export async function POST(request: Request) {
   const nip = String(body.nip || "").trim();
   const name = String(body.name || "").trim();
   const role = String(body.role || "") as Role;
-  const unitId = String(body.unitId || "").trim();
+  const unitRaw = String(body.unitId || "").trim();
+  const unitId = unitRaw ? normalizeUnitId(unitRaw) : null;
   const password = String(body.password || "");
 
   const nipErr = validateNip(nip);
@@ -86,6 +88,9 @@ export async function POST(request: Request) {
   }
   if (password.length < 6) {
     return NextResponse.json({ error: "Password minimal 6 karakter" }, { status: 400 });
+  }
+  if (unitRaw && !unitId) {
+    return NextResponse.json({ error: "Unit tidak valid — pilih dari daftar" }, { status: 400 });
   }
 
   const db = getAdminDb();
