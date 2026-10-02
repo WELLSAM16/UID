@@ -6,7 +6,7 @@ export default function Home() {
       <div className="glass-panel" style={{ padding: "40px", textAlign: "center", maxWidth: "600px" }}>
         <img src="/pln.svg" alt="Logo PLN" style={{ width: "170px", height: "auto", margin: "0 auto 20px auto", display: "block" }} />
         <h1 style={{ fontSize: "2.5rem", marginBottom: "30px", color: "#111" }}>
-          KU UP3 Bintaro
+          KU UID JAYA
         </h1>
         <div style={{ display: "flex", gap: "15px", justifyContent: "center" }}>
           <Link href="/login">
