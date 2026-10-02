@@ -142,8 +142,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    setUser(null);
     await signOut(auth);
-    router.push("/login");
+    router.replace("/login");
   };
 
   return (
