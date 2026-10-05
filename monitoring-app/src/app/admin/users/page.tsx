@@ -221,11 +221,12 @@ export default function AdminUsersPage() {
     }
   };
 
-  // Hapus permanen: administrator saja, akun ● PW AWAL tanpa draf.
-  // Konfirmasi ganda: confirm + ketik ulang NIP.
+  // Hapus permanen: administrator saja, semua akun.
+  // Konfirmasi ganda: confirm + ketik ulang NIP, lalu kirim force:true.
   const isSuperAdmin = user?.role === "administrator" || (user?.role as string) === "admin";
   const handleHardDelete = async (u: ManagedUser) => {
-    if (!confirm(`HAPUS PERMANEN NIP ${u.nip}? Dokumen + login Auth dihapus total dan tidak bisa dikembalikan.`)) return;
+    const risky = !u.mustChangePassword ? " Akun ini SUDAH pernah login" : "";
+    if (!confirm(`HAPUS PERMANEN NIP ${u.nip}? Dokumen + login Auth dihapus total dan tidak bisa dikembalikan.${risky ? `${risky} — draf yang ditinggalkan menjadi yatim.` : ""}`)) return;
     const typed = prompt(`Ketik NIP "${u.nip}" untuk mengonfirmasi hapus permanen:`);
     if (typed === null) return;
     if (typed.trim().toUpperCase() !== (u.nip || "").toUpperCase()) {
@@ -233,12 +234,18 @@ export default function AdminUsersPage() {
       return;
     }
     try {
-      await callApi(`/api/users/${u.id}?hard=1`, "DELETE");
+      await callApi(`/api/users/${u.id}?hard=1`, "DELETE", { force: true });
       setMsg(`Akun NIP ${u.nip} dihapus permanen.`);
       await loadData();
     } catch (err: any) {
       setError(err.message);
     }
+  };
+
+  const handleRowAction = (u: ManagedUser, action: string) => {
+    if (action === "reset") handleResetPassword(u);
+    else if (action === "toggle") handleToggleActive(u);
+    else if (action === "hard") handleHardDelete(u);
   };
 
   const canEdit = (targetRole: string | null) => {
@@ -457,19 +464,18 @@ export default function AdminUsersPage() {
                     </td>
                     <td style={{ padding: "13px 16px", whiteSpace: "nowrap" }}>
                       {canEdit(u.role) && u.id !== user?.uid && (
-                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                          <button onClick={() => handleResetPassword(u)} style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--card-border)", background: "white", cursor: "pointer", fontSize: "0.78rem" }}>
-                            Reset PW
-                          </button>
-                          <button onClick={() => handleToggleActive(u)} style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--card-border)", background: u.isActive ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.12)", color: u.isActive ? "var(--danger)" : "var(--success)", cursor: "pointer", fontSize: "0.78rem" }}>
-                            {u.isActive ? "Nonaktifkan" : "Aktifkan"}
-                          </button>
-                          {isSuperAdmin && u.mustChangePassword && (
-                            <button onClick={() => handleHardDelete(u)} title="Hapus permanen: hanya akun PW AWAL tanpa draf" style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(239,68,68,0.4)", background: "var(--danger)", color: "white", cursor: "pointer", fontSize: "0.78rem", fontWeight: 700 }}>
-                            Hapus
-                            </button>
-                          )}
-                        </div>
+                        <select
+                          className="input-field"
+                          defaultValue=""
+                          onChange={(e) => { const v = e.target.value; e.target.value = ""; if (v) handleRowAction(u, v); }}
+                          style={{ padding: "6px 10px", fontSize: "0.8rem", minWidth: "150px" }}
+                          title="Pilih aksi untuk akun ini"
+                        >
+                          <option value="">— Aksi —</option>
+                          <option value="reset">Reset PW</option>
+                          <option value="toggle">{u.isActive ? "Nonaktifkan" : "Aktifkan"}</option>
+                          {isSuperAdmin && <option value="hard">Hapus permanen</option>}
+                        </select>
                       )}
                     </td>
                   </tr>

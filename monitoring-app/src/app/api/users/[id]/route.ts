@@ -122,11 +122,13 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
  * DELETE /api/users/[id] — nonaktifkan akun (soft delete).
  * Dokumen + Auth didisable, riwayat draf tetap utuh untuk audit.
  *
- * DELETE /api/users/[id]?hard=1 — HAPUS PERMANEN (administrator saja).
- * Syarat (sesuai NOTULENSI seksi 7): akun `● PW AWAL` (belum pernah login,
- * mustChangePassword=true) + nol draf di content_drafts & press_release_drafts.
+ * DELETE /api/users/[id]?hard=1 — HAPUS PERMANEN (administrator saja,
+ * untuk SEMUA akun termasuk yang sudah pernah login / ber-draf).
+ * Body { force: true } wajib bila akun punya riwayat (sudah login atau
+ * punya draf) — UI mengirimnya hanya setelah konfirmasi ketik ulang NIP.
  * Menghapus dokumen users + akun Auth. Dokumen account_requests dibiarkan
- * sebagai jejak audit persetujuan.
+ * sebagai jejak audit persetujuan. Draf yang ditinggalkan menjadi yatim
+ * (authorUid tanpa profil) — gunakan dengan sadar.
  */
 export async function DELETE(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { response, user } = await requireUser(request);
@@ -152,24 +154,26 @@ export async function DELETE(request: Request, ctx: { params: Promise<{ id: stri
     );
   }
 
-  // --- Hapus permanen: hanya administrator, akun PW AWAL tanpa draf ---
+  // --- Hapus permanen: hanya administrator (super admin), semua akun ---
   if (new URL(request.url).searchParams.get("hard") === "1") {
     if (user.role !== "administrator" && user.role !== "admin") {
       return NextResponse.json({ error: "Hapus permanen hanya boleh oleh administrator" }, { status: 403 });
     }
-    if (current.mustChangePassword !== true) {
-      return NextResponse.json(
-        { error: "Hanya akun ● PW AWAL (belum pernah login) yang boleh dihapus permanen. Nonaktifkan saja akun ini." },
-        { status: 409 }
-      );
-    }
+    const hadHistory = current.mustChangePassword !== true;
     const [medsos, press] = await Promise.all([
       db.collection("content_drafts").where("authorUid", "==", id).limit(1).get(),
       db.collection("press_release_drafts").where("authorUid", "==", id).limit(1).get(),
     ]);
-    if (!medsos.empty || !press.empty) {
+    const draftCount = medsos.size + press.size;
+    const hardBody = readBody(await request.text());
+    if ((hadHistory || draftCount > 0) && hardBody?.force !== true) {
       return NextResponse.json(
-        { error: "Akun memiliki draf. Hapus permanen dibatalkan — nonaktifkan saja agar atribusi draf utuh." },
+        {
+          error: "Akun ini sudah pernah login atau memiliki draf. Ulangi dengan konfirmasi eksplisit (force).",
+          needsForce: true,
+          hadHistory,
+          draftCount,
+        },
         { status: 409 }
       );
     }
@@ -183,7 +187,7 @@ export async function DELETE(request: Request, ctx: { params: Promise<{ id: stri
       }
     }
     await ref.delete();
-    return NextResponse.json({ ok: true, hard: true });
+    return NextResponse.json({ ok: true, hard: true, draftCount });
   }
 
   await adminUpdateAuthUser(id, { disabled: true });

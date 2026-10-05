@@ -40,8 +40,9 @@ Tanggal: 30 Sep 2026. Branch: `tahap-1-fondasi-akun` (dari `master` via `fix-das
 - Bootstrap admin pertama: `node scripts/make-admin.js samuelsihombing160405@gmail.com administrator uid`.
 - Urutan uji: NIP tak terdaftar ditolak → admin buat Staff → Staff dipaksa ganti password → role lain tidak bisa buka `/admin/*`.
 
-## 7. Hapus permanen (DIBANGUN Okt 2026, dulu ide parkir 1 Okt 2026)
-- Kelola Pengguna tetap soft-delete (nonaktifkan) sebagai default — atribusi draf + audit utuh.
-- Tombol **Hapus** (merah) = hapus permanen, HANYA bila: role administrator, akun `● PW AWAL` (belum pernah login), NOL draf medsos + press, konfirmasi ketik ulang NIP.
-- `DELETE /api/users/[id]?hard=1` menegakkan syarat di server (409 bila ber-riwayat); dokumen `account_requests` dibiarkan sebagai jejak audit.
-- Alternatif prioritas tetap ada: sembunyikan akun nonaktif agar daftar bersih tanpa buang data (belum dibangun).
+## 7. Hapus permanen (keputusan owner: SEMUA akun, administrator saja)
+- Kolom AKSI di Kelola Pengguna berbentuk dropdown: Reset PW / Nonaktifkan-Aktifkan / Hapus permanen.
+- Hapus permanen HANYA untuk role administrator (super admin); Admin UID tidak melihat opsinya; akun sendiri tidak bisa dihapus.
+- Berlaku untuk semua akun termasuk yang sudah login / ber-draf, dengan konfirmasi ganda (dialog + ketik ulang NIP) + flag `force` yang dikirim eksplisit dari UI. Server menolak bila bukan administrator.
+- Konsekuensi yang disadari owner: dokumen `users` + login Auth hilang total; draf yang ditinggalkan menjadi yatim (authorUid tanpa profil); `account_requests` dibiarkan sebagai jejak audit.
+- Soft-delete (nonaktifkan) tetap opsi utama untuk mutasi/keluar.
