@@ -86,3 +86,8 @@ export async function adminUpdateAuthUser(
   if (opts.disabled !== undefined) body.disableUser = opts.disabled;
   await toolkit("setAccountInfo", body);
 }
+
+/** Hapus permanen akun Auth. UNKNOWN/USER_NOT_FOUND diteruskan sebagai error ramah. */
+export async function adminDeleteAuthUser(uid: string): Promise<void> {
+  await toolkit("deleteAccount", { localId: uid });
+}
