@@ -31,8 +31,23 @@ service cloud.firestore {
     // Field phone/waStatus disiapkan untuk fase kirim via WA berikutnya.
     match /account_requests/{reqId} {
       allow create: if false;
-      allow read: if request.auth != null && isAdminRole();
+      allow read: if request.auth != null && isSuperAdmin();
       allow update, delete: if false;
+    }
+
+    // Stakeholder KPI 5 & 6 (kerangka — API + tulis menyusul).
+    // Baca: semua user login. Tulis langsung: ditolak (wajib via Admin SDK).
+    match /stakeholders/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /stakeholder_activities/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /kpi_targets/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
     }
     match /monitored_accounts/{doc} {
       // Monitoring data: any signed-in user can read; only admin can write.
