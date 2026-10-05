@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-import { adminUpdateAuthUser } from "@/lib/firebaseAuthAdmin";
+import { adminUpdateAuthUser, adminDeleteAuthUser } from "@/lib/firebaseAuthAdmin";
 import { requireUser } from "@/lib/authServer";
 import { canManageRole, normalizeUnitId, MANAGEABLE_ROLES, type Role } from "@/lib/roles";
 
@@ -121,6 +121,12 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
 /**
  * DELETE /api/users/[id] — nonaktifkan akun (soft delete).
  * Dokumen + Auth didisable, riwayat draf tetap utuh untuk audit.
+ *
+ * DELETE /api/users/[id]?hard=1 — HAPUS PERMANEN (administrator saja).
+ * Syarat (sesuai NOTULENSI seksi 7): akun `● PW AWAL` (belum pernah login,
+ * mustChangePassword=true) + nol draf di content_drafts & press_release_drafts.
+ * Menghapus dokumen users + akun Auth. Dokumen account_requests dibiarkan
+ * sebagai jejak audit persetujuan.
  */
 export async function DELETE(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { response, user } = await requireUser(request);
@@ -144,6 +150,40 @@ export async function DELETE(request: Request, ctx: { params: Promise<{ id: stri
       { error: "Admin UID hanya boleh mengelola staff / team_leader / asman" },
       { status: 403 }
     );
+  }
+
+  // --- Hapus permanen: hanya administrator, akun PW AWAL tanpa draf ---
+  if (new URL(request.url).searchParams.get("hard") === "1") {
+    if (user.role !== "administrator" && user.role !== "admin") {
+      return NextResponse.json({ error: "Hapus permanen hanya boleh oleh administrator" }, { status: 403 });
+    }
+    if (current.mustChangePassword !== true) {
+      return NextResponse.json(
+        { error: "Hanya akun ● PW AWAL (belum pernah login) yang boleh dihapus permanen. Nonaktifkan saja akun ini." },
+        { status: 409 }
+      );
+    }
+    const [medsos, press] = await Promise.all([
+      db.collection("content_drafts").where("authorUid", "==", id).limit(1).get(),
+      db.collection("press_release_drafts").where("authorUid", "==", id).limit(1).get(),
+    ]);
+    if (!medsos.empty || !press.empty) {
+      return NextResponse.json(
+        { error: "Akun memiliki draf. Hapus permanen dibatalkan — nonaktifkan saja agar atribusi draf utuh." },
+        { status: 409 }
+      );
+    }
+    try {
+      await adminDeleteAuthUser(id);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Auth sudah tidak ada (misal dihapus manual di Console) → lanjut hapus dokumen.
+      if (!msg.includes("USER_NOT_FOUND") && !msg.includes("tidak ditemukan")) {
+        return NextResponse.json({ error: msg || "Gagal menghapus akun Auth" }, { status: 500 });
+      }
+    }
+    await ref.delete();
+    return NextResponse.json({ ok: true, hard: true });
   }
 
   await adminUpdateAuthUser(id, { disabled: true });

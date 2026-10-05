@@ -221,6 +221,26 @@ export default function AdminUsersPage() {
     }
   };
 
+  // Hapus permanen: administrator saja, akun ● PW AWAL tanpa draf.
+  // Konfirmasi ganda: confirm + ketik ulang NIP.
+  const isSuperAdmin = user?.role === "administrator" || (user?.role as string) === "admin";
+  const handleHardDelete = async (u: ManagedUser) => {
+    if (!confirm(`HAPUS PERMANEN NIP ${u.nip}? Dokumen + login Auth dihapus total dan tidak bisa dikembalikan.`)) return;
+    const typed = prompt(`Ketik NIP "${u.nip}" untuk mengonfirmasi hapus permanen:`);
+    if (typed === null) return;
+    if (typed.trim().toUpperCase() !== (u.nip || "").toUpperCase()) {
+      setError("NIP yang diketik tidak cocok. Hapus permanen dibatalkan.");
+      return;
+    }
+    try {
+      await callApi(`/api/users/${u.id}?hard=1`, "DELETE");
+      setMsg(`Akun NIP ${u.nip} dihapus permanen.`);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   const canEdit = (targetRole: string | null) => {
     if (user?.role === "administrator" || (user?.role as string) === "admin") return true;
     if (user?.role === "admin_uid")
@@ -437,13 +457,18 @@ export default function AdminUsersPage() {
                     </td>
                     <td style={{ padding: "13px 16px", whiteSpace: "nowrap" }}>
                       {canEdit(u.role) && u.id !== user?.uid && (
-                        <div style={{ display: "flex", gap: "8px" }}>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                           <button onClick={() => handleResetPassword(u)} style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--card-border)", background: "white", cursor: "pointer", fontSize: "0.78rem" }}>
                             Reset PW
                           </button>
                           <button onClick={() => handleToggleActive(u)} style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--card-border)", background: u.isActive ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.12)", color: u.isActive ? "var(--danger)" : "var(--success)", cursor: "pointer", fontSize: "0.78rem" }}>
                             {u.isActive ? "Nonaktifkan" : "Aktifkan"}
                           </button>
+                          {isSuperAdmin && u.mustChangePassword && (
+                            <button onClick={() => handleHardDelete(u)} title="Hapus permanen: hanya akun PW AWAL tanpa draf" style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(239,68,68,0.4)", background: "var(--danger)", color: "white", cursor: "pointer", fontSize: "0.78rem", fontWeight: 700 }}>
+                            Hapus
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>
