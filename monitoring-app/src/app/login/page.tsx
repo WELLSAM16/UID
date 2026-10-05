@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/authContext";
 
 export default function LoginPage() {
@@ -86,6 +87,14 @@ export default function LoginPage() {
           >
             {isLoggingIn ? "Logging in..." : "Login"}
           </button>
+          <Link href="/ajukan-akun">
+            <button
+              className="btn"
+              style={{ width: "100%", background: "white", color: "#0284c7", border: "1px solid #38bdf8" }}
+            >
+              Ajukan Pembuatan Akun
+            </button>
+          </Link>
         </div>
 
         <p style={{ marginTop: "20px", fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: "1.5" }}>

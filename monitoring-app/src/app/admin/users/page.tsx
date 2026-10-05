@@ -16,6 +16,21 @@ interface ManagedUser {
   mustChangePassword: boolean;
 }
 
+interface AccountRequestItem {
+  id: string;
+  nip: string;
+  name: string;
+  role: string;
+  unitId: string | null;
+  email: string;
+  phone?: string | null;
+  status: string;
+  emailSent?: boolean;
+  emailError?: string | null;
+  createdAt?: string;
+  note?: string | null;
+}
+
 const ROLE_OPTIONS = ["staff", "team_leader", "asman", "admin_uid", "administrator"];
 
 export default function AdminUsersPage() {
@@ -33,6 +48,10 @@ export default function AdminUsersPage() {
   const [unitId, setUnitId] = useState("");
   const [password, setPassword] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Pengajuan akun dari publik (/ajukan-akun)
+  const [requests, setRequests] = useState<AccountRequestItem[]>([]);
+  const [reqLoading, setReqLoading] = useState(false);
 
   async function authHeaders(): Promise<HeadersInit> {
     let token = await getToken();
@@ -58,7 +77,50 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
+    await loadRequests();
   }
+
+  async function loadRequests() {
+    try {
+      setReqLoading(true);
+      const res = await fetch("/api/account-requests", { headers: await authHeaders(), cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `API ${res.status}`);
+      setRequests(data.requests || []);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setReqLoading(false);
+    }
+  }
+
+  const handleApprove = async (r: AccountRequestItem) => {
+    if (!confirm(`Setujui NIP ${r.nip} (${ROLE_LABELS[r.role] || r.role}, ${r.unitId})? Password awal acak akan dikirim ke ${r.email}.`)) return;
+    try {
+      const data = await callApi(`/api/account-requests/${r.id}`, "PATCH", { action: "approve" });
+      if (data.emailSent) {
+        setMsg(`NIP ${r.nip} disetujui. Kredensial terkirim ke ${r.email}.`);
+      } else {
+        setMsg(`NIP ${r.nip} disetujui TAPI email gagal (${data.emailError || "SMTP belum dikonfigurasi"}). Password awal: ${data.tempPassword} — sampaikan manual.`);
+      }
+      await loadData();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleReject = async (r: AccountRequestItem) => {
+    const note = prompt(`Tolak pengajuan NIP ${r.nip}? Alasan (opsional):`) ?? undefined;
+    // prompt batal = undefined → jangan lanjut; string (termasuk "") = lanjut.
+    if (note === undefined) return;
+    try {
+      await callApi(`/api/account-requests/${r.id}`, "PATCH", { action: "reject", note });
+      setMsg(`Pengajuan NIP ${r.nip} ditolak.`);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -229,6 +291,69 @@ export default function AdminUsersPage() {
         </div>
         <p style={{ marginTop: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
           Pengguna wajib mengganti password awal saat login pertama. Admin UID hanya boleh mendaftarkan Staff / Team Leader / Asman.
+        </p>
+      </section>
+
+      {/* Pengajuan akun publik */}
+      <section className="glass-panel" style={{ padding: "20px 24px", marginBottom: "24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+          <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700 }}>
+            Pengajuan Akun Masuk {requests.filter((r) => r.status === "pending").length > 0 && (
+              <span style={{ marginLeft: "8px", fontSize: "0.75rem", background: "#f59e0b", color: "white", borderRadius: "999px", padding: "2px 10px" }}>
+                {requests.filter((r) => r.status === "pending").length} pending
+              </span>
+            )}
+          </h2>
+          <button className="btn" onClick={loadRequests} style={{ background: "white", border: "1px solid var(--card-border)", fontSize: "0.85rem" }}>
+            {reqLoading ? "Memuat..." : "Muat ulang"}
+          </button>
+        </div>
+        {requests.length === 0 ? (
+          <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Belum ada pengajuan.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--card-border)" }}>
+                  {["NIP", "NAMA", "ROLE", "UNIT", "EMAIL", "STATUS", "AKSI"].map((c) => (
+                    <th key={c} style={{ padding: "10px 12px", textAlign: "left", color: "var(--text-muted)", fontSize: "0.72rem", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>{c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {requests.map((r) => (
+                  <tr key={r.id} style={{ borderBottom: "1px solid var(--card-border)" }}>
+                    <td style={{ padding: "10px 12px", fontWeight: 600, whiteSpace: "nowrap" }}>{r.nip}</td>
+                    <td style={{ padding: "10px 12px" }}>{r.name}</td>
+                    <td style={{ padding: "10px 12px" }}>{ROLE_LABELS[r.role] || r.role}</td>
+                    <td style={{ padding: "10px 12px" }}>{r.unitId || "-"}</td>
+                    <td style={{ padding: "10px 12px" }}>{r.email}{r.phone ? <span style={{ color: "var(--text-muted)" }}> • {r.phone}</span> : null}</td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, color: "white",
+                        background: r.status === "pending" ? "#f59e0b" : r.status === "approved" ? "#10b981" : "#6b7280" }}>
+                        {r.status === "pending" ? "Pending" : r.status === "approved" ? `Disetujui${r.emailSent === false ? " (email gagal)" : ""}` : "Ditolak"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+                      {r.status === "pending" && canEdit(r.role) && (
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <button onClick={() => handleApprove(r)} style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--card-border)", background: "rgba(16,185,129,0.12)", color: "var(--success)", cursor: "pointer", fontSize: "0.78rem" }}>
+                            Setujui + kirim email
+                          </button>
+                          <button onClick={() => handleReject(r)} style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--card-border)", background: "rgba(239,68,68,0.1)", color: "var(--danger)", cursor: "pointer", fontSize: "0.78rem" }}>
+                            Tolak
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p style={{ marginTop: "10px", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+          Approve membuat akun + password acak 10 karakter, lalu mengirim NIP + password ke email. Bila SMTP belum diset / gagal, password ditampilkan ke admin untuk disampaikan manual. Siap disambung kirim via WA tahap berikutnya (field no. WA sudah disimpan).
         </p>
       </section>
 

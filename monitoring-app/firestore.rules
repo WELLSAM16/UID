@@ -20,8 +20,17 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Monitoring data: any signed-in user can read; only admin can write.
+    // Request pembuatan akun (publik mengajukan, admin menyetujui).
+    // Ditulis via Admin SDK (/api/account-requests) agar bisa rate-limit +
+    // validasi server; client langsung ditolak. Baca/tulis langsung hanya admin.
+    // Field phone/waStatus disiapkan untuk fase kirim via WA berikutnya.
+    match /account_requests/{reqId} {
+      allow create: if false;
+      allow read: if request.auth != null && isAdminRole();
+      allow update, delete: if false;
+    }
     match /monitored_accounts/{doc} {
+      // Monitoring data: any signed-in user can read; only admin can write.
       allow read: if request.auth != null;
       allow write: if request.auth != null && isAdminRole();
     }
