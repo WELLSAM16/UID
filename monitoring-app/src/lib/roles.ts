@@ -5,8 +5,9 @@
  * - staff        : UP3, buat draf + lihat dashboard unitnya
  * - team_leader  : UP3, review draf tahap TL (se-unit)
  * - asman        : UP3, approval UP3 (se-unit)
- * - admin_uid    : UID, operasional lintas unit (kurasi, target, sync, kelola NIP)
- * - administrator: dev/maintenance, akses penuh semua fitur
+ * - admin_uid    : UID, operasional lintas unit (kurasi, target, sync, review)
+ * - administrator: dev/maintenance + super admin, akses penuh semua fitur
+ *   (satu-satunya role yang boleh membuka Kelola Pengguna & hapus permanen)
  *
  * Login memakai NIP. Di belakang layar NIP dipetakan ke email
  * `<nip>@uidjaya.pln.co.id` agar tetap memakai Firebase Auth email/password
@@ -148,6 +149,11 @@ export function loginToEmail(input: string): string {
 /** Punya kewenangan admin operasional (kelola target/sumber/sync/approve legacy). */
 export function isAdminRole(role: string | undefined | null): boolean {
   return role === "admin_uid" || role === "administrator" || role === "admin";
+}
+
+/** Super admin: hanya administrator. Kelola Pengguna + hapus permanen terkunci untuk role ini. */
+export function isSuperAdminRole(role: string | undefined | null): boolean {
+  return role === "administrator" || role === "admin";
 }
 
 /** Boleh membuka area /admin (kelola pengguna, review, target, sumber). */

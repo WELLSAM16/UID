@@ -12,7 +12,8 @@ Tanggal: 30 Sep 2026. Branch: `tahap-1-fondasi-akun` (dari `master` via `fix-das
 - Di luar itu: **Administrator** (dev/maintenance, akses semua fitur 4 role).
 - Login pakai **NIP** (dipetakan ke `<nip>@uidjaya.pln.co.id`); akun email khusus tetap bisa login (untuk administrator).
 - Password pertama dibuat admin; user wajib ganti saat login pertama (`mustChangePassword`).
-- Mutasi/nonaktif akun sepenuhnya kendali admin (soft delete, riwayat draf utuh).
+- Mutasi/nonaktif akun sepenuhnya kendali administrator / super admin (soft delete, riwayat draf utuh).
+- Kelola Pengguna (`/admin/users` + `/api/users` + approval request) khusus super admin; Admin UID fokus operasional (review draf, target, sumber, sync).
 - Registrasi publik **ditutup** (auto-create `user` dihapus).
 
 ## 3. Alur yang disepakati

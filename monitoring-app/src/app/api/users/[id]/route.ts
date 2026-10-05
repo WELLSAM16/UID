@@ -5,7 +5,8 @@ import { requireUser } from "@/lib/authServer";
 import { canManageRole, normalizeUnitId, MANAGEABLE_ROLES, type Role } from "@/lib/roles";
 
 function isUserManager(role: string | undefined) {
-  return role === "administrator" || role === "admin_uid" || role === "admin";
+  // Kelola Pengguna khusus super admin (administrator).
+  return role === "administrator" || role === "admin";
 }
 
 function readBody(raw: string): any {
@@ -21,6 +22,7 @@ function readBody(raw: string): any {
  * PATCH /api/users/[id] — ubah role / unit / nama / status aktif / reset password.
  * Body boleh berisi: { name?, role?, unitId?, isActive?, newPassword?, mustChangePassword? }
  * Mutasi pegawai = PATCH role/unitId pada NIP yang sama.
+ * Khusus super admin (administrator).
  */
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { response, user } = await requireUser(request);

@@ -131,15 +131,15 @@ export async function POST(request: Request) {
 }
 
 /**
- * GET /api/account-requests — admin saja (daftar pengajuan).
+ * GET /api/account-requests — administrator saja (daftar pengajuan).
  * Query opsional: ?status=pending (default semua, pending dulu).
  */
 export async function GET(request: Request) {
   const { response, user } = await requireUser(request);
   if (response) return response;
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (user.role !== "administrator" && user.role !== "admin_uid" && user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden: admin only" }, { status: 403 });
+  if (user.role !== "administrator" && user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden: super admin only" }, { status: 403 });
   }
 
   const status = new URL(request.url).searchParams.get("status");

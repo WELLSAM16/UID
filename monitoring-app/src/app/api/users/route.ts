@@ -21,15 +21,15 @@ function readBody(raw: string): any {
 }
 
 /**
- * GET /api/users — daftar pengguna (admin_uid & administrator).
+ * GET /api/users — daftar pengguna (administrator saja).
  * Non-admin ditolak. Password tidak pernah dikembalikan.
  */
 export async function GET(request: Request) {
   const { response, user } = await requireUser(request);
   if (response) return response;
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (user.role !== "administrator" && user.role !== "admin_uid" && user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden: admin only" }, { status: 403 });
+  if (user.role !== "administrator" && user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden: super admin only" }, { status: 403 });
   }
 
   const snap = await getAdminDb().collection("users").get();
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
 }
 
 /**
- * POST /api/users — daftarkan NIP baru (admin saja).
+ * POST /api/users — daftarkan NIP baru (administrator saja).
  * Body: { nip, name?, role, unitId?, password }
  * Password awal dibuat admin; user wajib ganti saat login pertama.
  */
@@ -61,8 +61,8 @@ export async function POST(request: Request) {
   const { response, user } = await requireUser(request);
   if (response) return response;
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (user.role !== "administrator" && user.role !== "admin_uid" && user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden: admin only" }, { status: 403 });
+  if (user.role !== "administrator" && user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden: super admin only" }, { status: 403 });
   }
 
   const body = readBody(await request.text());

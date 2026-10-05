@@ -124,7 +124,8 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     if (!user) return;
-    if (user.role !== "administrator" && user.role !== "admin_uid" && (user.role as string) !== "admin") {
+    // Kelola Pengguna khusus super admin (administrator).
+    if (user.role !== "administrator" && (user.role as string) !== "admin") {
       router.replace("/beranda");
       return;
     }
@@ -317,7 +318,7 @@ export default function AdminUsersPage() {
           </button>
         </div>
         <p style={{ marginTop: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-          Pengguna wajib mengganti password awal saat login pertama. Admin UID hanya boleh mendaftarkan Staff / Team Leader / Asman.
+          Pengguna wajib mengganti password awal saat login pertama. Halaman ini khusus administrator (super admin).
         </p>
       </section>
 

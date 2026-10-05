@@ -18,7 +18,7 @@ function readBody(raw: string): any {
 }
 
 /**
- * PATCH /api/account-requests/[id] — admin saja.
+ * PATCH /api/account-requests/[id] — administrator saja.
  * Body: { action: "approve" } → buat akun + kirim email kredensial.
  * Body: { action: "reject", note? } → tolak pengajuan.
  *
@@ -29,8 +29,8 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   const { response, user } = await requireUser(request);
   if (response) return response;
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (user.role !== "administrator" && user.role !== "admin_uid" && user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden: admin only" }, { status: 403 });
+  if (user.role !== "administrator" && user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden: super admin only" }, { status: 403 });
   }
   const { id } = await ctx.params;
 
