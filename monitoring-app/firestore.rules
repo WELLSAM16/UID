@@ -10,9 +10,14 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"];
     }
+    // Super admin (administrator) — satu-satunya yang boleh membaca daftar users.
+    function isSuperAdmin() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin"];
+    }
     match /users/{uid} {
       allow read: if request.auth != null
-        && (request.auth.uid == uid || isAdminRole());
+        && (request.auth.uid == uid || isSuperAdmin());
       allow create: if false;
       allow update: if request.auth != null && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["mustChangePassword"])

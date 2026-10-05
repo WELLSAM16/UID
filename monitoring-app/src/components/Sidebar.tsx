@@ -12,6 +12,8 @@ interface SubMenu {
   icon: string;
   desc: string;
   adminOnly?: boolean;
+  /** Hanya super admin (administrator). */
+  superAdminOnly?: boolean;
 }
 
 interface MainMenu {
@@ -56,7 +58,7 @@ const MENUS: MainMenu[] = [
     name: "Administrator",
     icon: "🛡️",
     children: [
-      { name: "Kelola Pengguna", href: "/admin/users", icon: "👥", desc: "NIP, role & status akun", adminOnly: true },
+      { name: "Kelola Pengguna", href: "/admin/users", icon: "👥", desc: "NIP, role & status akun", superAdminOnly: true },
     ],
   },
 ];
@@ -80,6 +82,7 @@ export default function Sidebar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const isAdmin = user?.role === "administrator" || user?.role === "admin_uid" || user?.role === "admin";
+  const isSuperAdmin = user?.role === "administrator" || user?.role === "admin";
   // Default: semua menu utama tertutup; hanya terbuka saat diklik,
   // atau otomatis saat salah satu sub menu-nya sedang aktif.
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -136,7 +139,9 @@ export default function Sidebar() {
             }
 
             // Menu utama dengan sub menu (akordeon)
-            const visibleSubs = menu.children.filter((s) => !s.adminOnly || isAdmin);
+            const visibleSubs = menu.children.filter(
+              (s) => (!s.adminOnly || isAdmin) && (!s.superAdminOnly || isSuperAdmin)
+            );
             if (visibleSubs.length === 0) return null;
             const expanded = isExpanded(menu);
             const activeParent = isChildActive(menu);
