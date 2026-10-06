@@ -53,6 +53,15 @@ service cloud.firestore {
       allow create: if false;
       allow update, delete: if false;
     }
+    // EVP KPI 3 (pengganti form volunteer TJSL eksternal).
+    // Tulis via Admin SDK (/api/evp-reports); client langsung ditolak.
+    match /evp_reports/{docId} {
+      allow read: if request.auth != null
+        && (isAdminRole() || resource.data.authorUid == request.auth.uid
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.unitId == resource.data.unitId);
+      allow create: if false;
+      allow update, delete: if false;
+    }
     // Stakeholder KPI 5 & 6 (kerangka — API + tulis menyusul).
     // Baca: semua user login. Tulis langsung: ditolak (wajib via Admin SDK).
     match /stakeholders/{docId} {
