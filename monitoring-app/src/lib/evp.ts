@@ -16,17 +16,13 @@ export type EvpStatus = "draft" | "pending" | "approved" | "rejected";
 
 export const EVP_STATUSES: EvpStatus[] = ["draft", "pending", "approved", "rejected"];
 
-/**
- * Kategori program — "Pendidikan" terlihat di form asli; sisanya pilar TJSL
- * umum. Koreksi daftar ini bila ada ketentuan resmi kategorinya.
- */
+/** Kategori program — sesuai opsi form asli. */
 export const EVP_KATEGORI = [
+  "Sosial",
   "Pendidikan",
-  "Kesehatan",
   "Lingkungan",
-  "Pemberdayaan Ekonomi",
-  "Bencana Alam",
-  "Lainnya",
+  "Kesehatan",
+  "Ekonomi",
 ] as const;
 
 export interface EvpReport {
