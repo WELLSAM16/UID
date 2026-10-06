@@ -74,6 +74,19 @@ const MENUS: MainMenu[] = [
   },
 ];
 
+function formatUnitName(unitId?: string): string {
+  if (!unitId) return "UID Jaya";
+  const v = unitId.trim().toUpperCase().replace(/\s+/g, " ");
+  if (v === "UID" || v === "UID JAYA") return "UID Jaya";
+  const parts = v.split(" ");
+  return parts
+    .map((p, i) => {
+      if (i === 0 && (p === "UP3" || p === "UP2D" || p === "UID")) return p;
+      return p.charAt(0) + p.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
 function itemStyle(isActive: boolean): React.CSSProperties {
   return {
     padding: "12px 16px",
@@ -114,7 +127,7 @@ export default function Sidebar() {
         <div className="sidebar-header" style={{ padding: "0 24px", marginBottom: "40px" }}>
           <div>
             <img src="/pln.svg" alt="Logo PLN" style={{ width: "130px", height: "auto", display: "block" }} />
-            <div style={{ marginTop: "8px", fontSize: "1.25rem", fontWeight: 700, color: "#111", whiteSpace: "nowrap" }}>UP3 Bintaro</div>
+            <div style={{ marginTop: "8px", fontSize: "1.25rem", fontWeight: 700, color: "#111", whiteSpace: "nowrap" }}>{formatUnitName(user?.unitId)}</div>
             {user?.name && <div style={{ marginTop: "6px", fontSize: "0.9rem", fontWeight: 600, color: "#111" }}>{user.name}</div>}
             <p style={{ fontSize: "0.8rem", marginTop: "5px" }}>
               Role: <span style={{ color: isAdmin ? "var(--danger)" : "var(--success)", fontWeight: "bold" }}>{ROLE_LABELS[user?.role || ""] || user?.role}</span>
