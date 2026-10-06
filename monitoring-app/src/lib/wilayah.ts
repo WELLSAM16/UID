@@ -91,8 +91,9 @@ export async function getDistrictMap(provinceId: string): Promise<Record<string,
   return fetchLocal<Record<string, Wilayah[]>>(`/wilayah/districts/${provinceId}.json`);
 }
 
-export function getDistricts(regencyId: string): Promise<Wilayah[]> {
-  return fetchList(`districts/${regencyId}.json`);
+/** Peta districtId -> kelurahan se-provinsi (file lokal, dimuat sekali). */
+export async function getVillageMap(provinceId: string): Promise<Record<string, Wilayah[]>> {
+  return fetchLocal<Record<string, Wilayah[]>>(`/wilayah/villages/${provinceId}.json`);
 }
 
 export function getVillages(districtId: string): Promise<Wilayah[]> {

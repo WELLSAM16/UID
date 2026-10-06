@@ -7,7 +7,7 @@ import {
   getProvinces,
   getRegencies,
   getDistrictMap,
-  getVillages,
+  getVillageMap,
   type Wilayah,
 } from "@/lib/wilayah";
 import { UNIT_OPTIONS, formatUnitDisplay } from "@/lib/roles";
@@ -75,8 +75,10 @@ export default function EvpPage() {
   const [kotaId, setKotaId] = useState("");
   const [kecId, setKecId] = useState("");
   const [kelId, setKelId] = useState("");
-  // Peta regencyId -> kecamatan se-provinsi (file lokal, tanpa API eksternal).
+  // Peta regencyId -> kecamatan dan districtId -> kelurahan se-provinsi
+  // (file lokal, tanpa API eksternal).
   const [distMap, setDistMap] = useState<Record<string, Wilayah[]>>({});
+  const [vilMap, setVilMap] = useState<Record<string, Wilayah[]>>({});
   const [wilLoading, setWilLoading] = useState("");
   const [kotaText, setKotaText] = useState(false);
   const [kecText, setKecText] = useState(false);
@@ -118,12 +120,18 @@ export default function EvpPage() {
     setProvinsi(pickName(provList, id));
     resetBelowKota();
     setDistMap({});
+    setVilMap({});
     if (!id) return;
     try {
       setWilLoading("kota");
-      const [regs, dmap] = await Promise.all([getRegencies(id), getDistrictMap(id)]);
+      const [regs, dmap, vmap] = await Promise.all([
+        getRegencies(id),
+        getDistrictMap(id),
+        getVillageMap(id),
+      ]);
       setKotaList(regs);
       setDistMap(dmap);
+      setVilMap(vmap);
       setKotaText(false); setKecText(false); setKelText(false);
     } catch {
       setKotaText(true); setKecText(true); setKelText(true);
@@ -141,20 +149,12 @@ export default function EvpPage() {
     if (!(distMap[id] || []).length && id) setKecText(true);
   };
 
-  const onKecChange = async (id: string) => {
+  const onKecChange = (id: string) => {
     setKecId(id);
     setKecamatan(pickName(kecList, id));
-    setKelId(""); setKelurahan(""); setKelList([]);
-    if (!id) return;
-    try {
-      setWilLoading("kelurahan");
-      setKelList(await getVillages(id));
-      setKelText(false);
-    } catch {
-      setKelText(true);
-    } finally {
-      setWilLoading("");
-    }
+    setKelId(""); setKelurahan(""); setKelList(vilMap[id] || []);
+    setKelText(false);
+    if (!(vilMap[id] || []).length && id) setKelText(true);
   };
 
   const onKelChange = (id: string) => {
@@ -210,7 +210,7 @@ export default function EvpPage() {
     setProvinsi(""); setKota(""); setKecamatan(""); setKelurahan("");
     setProvId(""); setKotaId(""); setKecId(""); setKelId("");
     setKotaList([]); setKecList([]); setKelList([]);
-    setDistMap({}); setKotaText(false); setKecText(false); setKelText(false);
+    setDistMap({}); setVilMap({}); setKotaText(false); setKecText(false); setKelText(false);
     setEvidenFile(null); setDeskripsi(""); setKategori("Pendidikan");
   };
 
