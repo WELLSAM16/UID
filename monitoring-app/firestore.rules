@@ -44,6 +44,15 @@ service cloud.firestore {
       allow create: if false;
       allow update, delete: if false;
     }
+    // Kunjungan PUMK KPI 4 (pengganti g-form Laporan Pengelolaan UMK).
+    // Tulis via Admin SDK (/api/pumk-visits); client langsung ditolak.
+    match /pumk_visits/{docId} {
+      allow read: if request.auth != null
+        && (isAdminRole() || resource.data.authorUid == request.auth.uid
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.unitId == resource.data.unitId);
+      allow create: if false;
+      allow update, delete: if false;
+    }
     // Stakeholder KPI 5 & 6 (kerangka — API + tulis menyusul).
     // Baca: semua user login. Tulis langsung: ditolak (wajib via Admin SDK).
     match /stakeholders/{docId} {
