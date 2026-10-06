@@ -3,6 +3,13 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/authContext";
 import { EVP_KATEGORI } from "@/lib/evp";
+import {
+  getProvinces,
+  getRegencies,
+  getDistricts,
+  getVillages,
+  type Wilayah,
+} from "@/lib/wilayah";
 import { UNIT_OPTIONS, formatUnitDisplay } from "@/lib/roles";
 
 interface Report {
@@ -58,6 +65,17 @@ export default function EvpPage() {
   const [kota, setKota] = useState("");
   const [kecamatan, setKecamatan] = useState("");
   const [kelurahan, setKelurahan] = useState("");
+  // Dropdown berjenjang (API wilayah gratis). Gagal dimuat = fallback teks bebas.
+  const [provList, setProvList] = useState<Wilayah[]>([]);
+  const [kotaList, setKotaList] = useState<Wilayah[]>([]);
+  const [kecList, setKecList] = useState<Wilayah[]>([]);
+  const [kelList, setKelList] = useState<Wilayah[]>([]);
+  const [provId, setProvId] = useState("");
+  const [kotaId, setKotaId] = useState("");
+  const [kecId, setKecId] = useState("");
+  const [kelId, setKelId] = useState("");
+  const [wilLoading, setWilLoading] = useState("");
+  const [wilFallback, setWilFallback] = useState(false);
   const [evidenFile, setEvidenFile] = useState<File | null>(null);
   const [tanggal, setTanggal] = useState(today());
   const [deskripsi, setDeskripsi] = useState("");
@@ -75,6 +93,69 @@ export default function EvpPage() {
     if (user.nip) setNip((v) => v || user.nip || "");
     if (user.unitId) setUpDetail((v) => v || formatUnitDisplay(user.unitId));
   }, [user]);
+
+  // Muat daftar provinsi sekali saat halaman dibuka.
+  useEffect(() => {
+    getProvinces()
+      .then(setProvList)
+      .catch(() => setWilFallback(true));
+  }, []);
+
+  const pickName = (list: Wilayah[], id: string) =>
+    list.find((w) => w.id === id)?.name || "";
+
+  const onProvChange = async (id: string) => {
+    setProvId(id);
+    setProvinsi(pickName(provList, id));
+    setKotaId(""); setKota(""); setKotaList([]);
+    setKecId(""); setKecamatan(""); setKecList([]);
+    setKelId(""); setKelurahan(""); setKelList([]);
+    if (!id) return;
+    try {
+      setWilLoading("kota");
+      setKotaList(await getRegencies(id));
+    } catch {
+      setWilFallback(true);
+    } finally {
+      setWilLoading("");
+    }
+  };
+
+  const onKotaChange = async (id: string) => {
+    setKotaId(id);
+    setKota(pickName(kotaList, id));
+    setKecId(""); setKecamatan(""); setKecList([]);
+    setKelId(""); setKelurahan(""); setKelList([]);
+    if (!id) return;
+    try {
+      setWilLoading("kecamatan");
+      setKecList(await getDistricts(id));
+    } catch {
+      setWilFallback(true);
+    } finally {
+      setWilLoading("");
+    }
+  };
+
+  const onKecChange = async (id: string) => {
+    setKecId(id);
+    setKecamatan(pickName(kecList, id));
+    setKelId(""); setKelurahan(""); setKelList([]);
+    if (!id) return;
+    try {
+      setWilLoading("kelurahan");
+      setKelList(await getVillages(id));
+    } catch {
+      setWilFallback(true);
+    } finally {
+      setWilLoading("");
+    }
+  };
+
+  const onKelChange = (id: string) => {
+    setKelId(id);
+    setKelurahan(pickName(kelList, id));
+  };
 
   async function authHeaders(): Promise<HeadersInit> {
     const token = await getToken();
@@ -122,6 +203,8 @@ export default function EvpPage() {
   const resetForm = () => {
     setNoHp(""); setNamaProgram("");
     setProvinsi(""); setKota(""); setKecamatan(""); setKelurahan("");
+    setProvId(""); setKotaId(""); setKecId(""); setKelId("");
+    setKotaList([]); setKecList([]); setKelList([]);
     setEvidenFile(null); setDeskripsi(""); setKategori("Pendidikan");
   };
 
@@ -271,18 +354,49 @@ export default function EvpPage() {
             <Field label="Nama Program" span={12}>
               <input className="input-field" placeholder="Nama program volunteer" value={namaProgram} onChange={(e) => setNamaProgram(e.target.value)} />
             </Field>
-            <Field label="Provinsi" span={6}>
-              <input className="input-field" placeholder="cth: Banten" value={provinsi} onChange={(e) => setProvinsi(e.target.value)} />
-            </Field>
-            <Field label="Kabupaten/Kota" span={6}>
-              <input className="input-field" placeholder="cth: Kota Tangerang Selatan" value={kota} onChange={(e) => setKota(e.target.value)} />
-            </Field>
-            <Field label="Kecamatan" span={6}>
-              <input className="input-field" placeholder="cth: Pondok Aren" value={kecamatan} onChange={(e) => setKecamatan(e.target.value)} />
-            </Field>
-            <Field label="Kelurahan/Desa" span={6}>
-              <input className="input-field" placeholder="cth: Pondok Aren" value={kelurahan} onChange={(e) => setKelurahan(e.target.value)} />
-            </Field>
+            {wilFallback ? (
+              <>
+                <Field label="Provinsi" span={6}>
+                  <input className="input-field" placeholder="cth: Banten" value={provinsi} onChange={(e) => setProvinsi(e.target.value)} />
+                </Field>
+                <Field label="Kabupaten/Kota" span={6}>
+                  <input className="input-field" placeholder="cth: Kota Tangerang Selatan" value={kota} onChange={(e) => setKota(e.target.value)} />
+                </Field>
+                <Field label="Kecamatan" span={6}>
+                  <input className="input-field" placeholder="cth: Pondok Aren" value={kecamatan} onChange={(e) => setKecamatan(e.target.value)} />
+                </Field>
+                <Field label="Kelurahan/Desa" span={6}>
+                  <input className="input-field" placeholder="cth: Pondok Aren" value={kelurahan} onChange={(e) => setKelurahan(e.target.value)} />
+                </Field>
+              </>
+            ) : (
+              <>
+                <Field label="Provinsi" span={6}>
+                  <select className="input-field" value={provId} onChange={(e) => onProvChange(e.target.value)}>
+                    <option value="">— Pilih Provinsi —</option>
+                    {provList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Kabupaten/Kota" span={6} hint={wilLoading === "kota" ? "Memuat..." : undefined}>
+                  <select className="input-field" value={kotaId} onChange={(e) => onKotaChange(e.target.value)} disabled={!provId}>
+                    <option value="">— Pilih Kota/Kab —</option>
+                    {kotaList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Kecamatan" span={6} hint={wilLoading === "kecamatan" ? "Memuat..." : undefined}>
+                  <select className="input-field" value={kecId} onChange={(e) => onKecChange(e.target.value)} disabled={!kotaId}>
+                    <option value="">— Pilih Kecamatan —</option>
+                    {kecList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Kelurahan/Desa" span={6} hint={wilLoading === "kelurahan" ? "Memuat..." : undefined}>
+                  <select className="input-field" value={kelId} onChange={(e) => onKelChange(e.target.value)} disabled={!kecId}>
+                    <option value="">— Pilih Kelurahan —</option>
+                    {kelList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </Field>
+              </>
+            )}
             <Field
               label="Eviden Kegiatan (tampilan saja)"
               span={6}
