@@ -1,7 +1,11 @@
 /**
- * Master wilayah Indonesia (gratis, tanpa API key) — dipakai dropdown
- * berjenjang Provinsi → Kabupaten/Kota → Kecamatan → Kelurahan di form EVP.
- * Sumber: https://github.com/emsifa/api-wilayah-indonesia (data Kemendagri).
+ * Master wilayah Indonesia — dibundel di aplikasi (public/wilayah) agar
+ * berfungsi tanpa akses ke API eksternal.
+ * - Provinsi: bawaan kode (34).
+ * - Kabupaten/Kota: /wilayah/regencies.json (peta provinceId -> daftar).
+ * - Kecamatan: /wilayah/districts/{provinceId}.json (peta regencyId -> daftar).
+ * - Kelurahan: API eksternal bila terjangkau, else isi manual (fallback teks).
+ * Sumber data: https://github.com/emsifa/api-wilayah-indonesia (Kemendagri).
  */
 export interface Wilayah {
   id: string;
@@ -61,16 +65,30 @@ async function fetchList(path: string): Promise<Wilayah[]> {
   return list;
 }
 
-export async function getProvinces(): Promise<Wilayah[]> {
-  try {
-    return await fetchList("provinces.json");
-  } catch {
-    return PROVINCES_STATIC;
-  }
+/** Ambil JSON same-origin (public/wilayah) dengan cache memori. */
+async function fetchLocal<T>(path: string): Promise<T> {
+  const hit = cache.get(path) as T | undefined;
+  if (hit !== undefined) return hit;
+  const res = await fetch(path, { cache: "force-cache" });
+  if (!res.ok) throw new Error(`Wilayah lokal ${res.status}`);
+  const data = (await res.json()) as T;
+  cache.set(path, data as unknown as Wilayah[]);
+  return data;
 }
 
-export function getRegencies(provinceId: string): Promise<Wilayah[]> {
-  return fetchList(`regencies/${provinceId}.json`);
+export async function getProvinces(): Promise<Wilayah[]> {
+  return PROVINCES_STATIC;
+}
+
+/** Kabupaten/Kota se-provinsi (file lokal). */
+export async function getRegencies(provinceId: string): Promise<Wilayah[]> {
+  const map = await fetchLocal<Record<string, Wilayah[]>>("/wilayah/regencies.json");
+  return map[provinceId] || [];
+}
+
+/** Peta regencyId -> kecamatan se-provinsi (file lokal, dimuat sekali). */
+export async function getDistrictMap(provinceId: string): Promise<Record<string, Wilayah[]>> {
+  return fetchLocal<Record<string, Wilayah[]>>(`/wilayah/districts/${provinceId}.json`);
 }
 
 export function getDistricts(regencyId: string): Promise<Wilayah[]> {

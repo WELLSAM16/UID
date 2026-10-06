@@ -6,7 +6,7 @@ import { EVP_KATEGORI } from "@/lib/evp";
 import {
   getProvinces,
   getRegencies,
-  getDistricts,
+  getDistrictMap,
   getVillages,
   type Wilayah,
 } from "@/lib/wilayah";
@@ -75,6 +75,8 @@ export default function EvpPage() {
   const [kotaId, setKotaId] = useState("");
   const [kecId, setKecId] = useState("");
   const [kelId, setKelId] = useState("");
+  // Peta regencyId -> kecamatan se-provinsi (file lokal, tanpa API eksternal).
+  const [distMap, setDistMap] = useState<Record<string, Wilayah[]>>({});
   const [wilLoading, setWilLoading] = useState("");
   const [kotaText, setKotaText] = useState(false);
   const [kecText, setKecText] = useState(false);
@@ -115,10 +117,13 @@ export default function EvpPage() {
     setProvId(id);
     setProvinsi(pickName(provList, id));
     resetBelowKota();
+    setDistMap({});
     if (!id) return;
     try {
       setWilLoading("kota");
-      setKotaList(await getRegencies(id));
+      const [regs, dmap] = await Promise.all([getRegencies(id), getDistrictMap(id)]);
+      setKotaList(regs);
+      setDistMap(dmap);
       setKotaText(false); setKecText(false); setKelText(false);
     } catch {
       setKotaText(true); setKecText(true); setKelText(true);
@@ -130,18 +135,10 @@ export default function EvpPage() {
   const onKotaChange = async (id: string) => {
     setKotaId(id);
     setKota(pickName(kotaList, id));
-    setKecId(""); setKecamatan(""); setKecList([]);
+    setKecId(""); setKecamatan(""); setKecList(distMap[id] || []);
     setKelId(""); setKelurahan(""); setKelList([]);
-    if (!id) return;
-    try {
-      setWilLoading("kecamatan");
-      setKecList(await getDistricts(id));
-      setKecText(false); setKelText(false);
-    } catch {
-      setKecText(true); setKelText(true);
-    } finally {
-      setWilLoading("");
-    }
+    setKecText(false);
+    if (!(distMap[id] || []).length && id) setKecText(true);
   };
 
   const onKecChange = async (id: string) => {
@@ -213,6 +210,7 @@ export default function EvpPage() {
     setProvinsi(""); setKota(""); setKecamatan(""); setKelurahan("");
     setProvId(""); setKotaId(""); setKecId(""); setKelId("");
     setKotaList([]); setKecList([]); setKelList([]);
+    setDistMap({}); setKotaText(false); setKecText(false); setKelText(false);
     setEvidenFile(null); setDeskripsi(""); setKategori("Pendidikan");
   };
 
