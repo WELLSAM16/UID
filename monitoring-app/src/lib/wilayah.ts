@@ -50,8 +50,12 @@ const PROVINCES_STATIC: Wilayah[] = [
   { id: "76", name: "SULAWESI BARAT" },
   { id: "81", name: "MALUKU" },
   { id: "82", name: "MALUKU UTARA" },
-  { id: "91", name: "PAPUA BARAT" },
-  { id: "94", name: "PAPUA" },
+  { id: "91", name: "PAPUA" },
+  { id: "92", name: "PAPUA BARAT" },
+  { id: "93", name: "PAPUA SELATAN" },
+  { id: "94", name: "PAPUA TENGAH" },
+  { id: "95", name: "PAPUA PEGUNUNGAN" },
+  { id: "96", name: "PAPUA BARAT DAYA" },
 ];
 
 async function fetchList(path: string): Promise<Wilayah[]> {
