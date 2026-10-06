@@ -95,6 +95,23 @@ export function normalizeUnitId(input: string | undefined | null): string | null
   return null;
 }
 
+/**
+ * Tampilan ramah untuk unitId ("UP3 BINTARO" -> "UP3 Bintaro",
+ * "UID"/"UID JAYA" -> "UID Jaya"). Dipakai di sidebar + filter unit.
+ */
+export function formatUnitDisplay(unitId?: string | null): string {
+  if (!unitId) return "UID Jaya";
+  const v = unitId.trim().toUpperCase().replace(/\s+/g, " ");
+  if (v === "UID" || v === "UID JAYA") return "UID Jaya";
+  return v
+    .split(" ")
+    .map((p, i) => {
+      if (i === 0 && (p === "UP3" || p === "UP2D" || p === "UID")) return p;
+      return p.charAt(0) + p.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
 /** Role lama -> role baru (kompatibilitas data existing). */
 export function normalizeRole(role: string | undefined): Role {
   if (role === "admin") return "administrator";

@@ -36,6 +36,8 @@ interface MonitoredAccount {
     entity_id: string;
     connected_account_id: string;
     status: string;
+    /** Unit pemilik akun (UNIT_OPTIONS). Diisi belakangan saat data akun menyusul. */
+    unitId?: string | null;
 }
 
 async function getMonitoredAccounts(): Promise<MonitoredAccount[]> {

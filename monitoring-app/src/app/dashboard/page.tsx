@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/authContext";
-import { isAdminRole } from "@/lib/roles";
+import { isAdminRole, formatUnitDisplay } from "@/lib/roles";
 import { useRouter } from "next/navigation";
 
 interface Post {
@@ -117,6 +117,10 @@ export default function Dashboard() {
   const isAdmin = isAdminRole(user?.role);
   const [posts, setPosts] = useState<Post[]>([]);
   const [availableAccounts, setAvailableAccounts] = useState<string[]>([]);
+  // Pemetaan username akun -> unitId (dari /api/monitored-accounts).
+  // Kosong bila data akun belum dipetakan — filter unit disembunyikan.
+  const [accountUnits, setAccountUnits] = useState<Record<string, string | null>>({});
+  const [selectedUnit, setSelectedUnit] = useState<string>("Semua Unit");
   const [selectedAccount, setSelectedAccount] = useState<string>("Semua Akun");
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [isLoaded, setIsLoaded] = useState(false);
@@ -161,6 +165,21 @@ export default function Dashboard() {
       const list: Post[] = Array.isArray(data.posts) ? data.posts : [];
       setAvailableAccounts(data.accounts_fetched || []);
       setSyncedAt(data.meta?.syncedAt || "");
+
+      // Peta akun -> unit (best-effort; gagal = filter unit disembunyikan).
+      try {
+        const muRes = await fetch("/api/monitored-accounts", { headers, cache: 'no-store' });
+        if (muRes.ok) {
+          const mu = await muRes.json();
+          const map: Record<string, string | null> = {};
+          for (const a of (Array.isArray(mu.accounts) ? mu.accounts : [])) {
+            if (a?.username) map[String(a.username)] = a.unitId || null;
+          }
+          setAccountUnits(map);
+        }
+      } catch {
+        // abaikan — halaman tetap jalan tanpa filter unit
+      }
 
       // Tanpa mock: arsip kosong = sync pertama belum berjalan.
 
@@ -256,12 +275,39 @@ export default function Dashboard() {
   }, [posts]);
   const accountLabel = (acc: string) => accountLabels.get(acc) || acc;
 
-  // Filter akun → statistik + opsi bulan mengikuti akun terpilih;
-  // ganti akun me-reset bulan (pola sama seperti monitoring press release).
+  // Filter unit -> akun -> statistik + opsi bulan mengikuti keduanya;
+  // ganti unit/akun me-reset bulan (pola sama seperti monitoring press release).
+  const unitOf = (acc: string): string | null =>
+    accountUnits[acc] ?? null;
+
+  const unitPosts = useMemo(() => {
+    if (selectedUnit === "Semua Unit") return posts;
+    return posts.filter(
+      (p) => unitOf(p.source_account) === selectedUnit || unitOf(p.username) === selectedUnit
+    );
+  }, [posts, selectedUnit, accountUnits]);
+
+  // Unit yang punya >=1 akun terpantau, beserta jumlah akunnya.
+  const unitsWithCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const [acc, unit] of Object.entries(accountUnits)) {
+      if (unit) counts.set(unit, (counts.get(unit) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [accountUnits]);
+
+  // Opsi akun mengikuti unit terpilih.
+  const unitAccounts = useMemo(() => {
+    if (selectedUnit === "Semua Unit") return availableAccounts;
+    return availableAccounts.filter(
+      (a) => accountUnits[a] === selectedUnit
+    );
+  }, [availableAccounts, selectedUnit, accountUnits]);
+
   const accountPosts = useMemo(() => {
-    if (selectedAccount === "Semua Akun") return posts;
-    return posts.filter((p) => p.source_account === selectedAccount || p.username === selectedAccount);
-  }, [posts, selectedAccount]);
+    if (selectedAccount === "Semua Akun") return unitPosts;
+    return unitPosts.filter((p) => p.source_account === selectedAccount || p.username === selectedAccount);
+  }, [unitPosts, selectedAccount]);
 
   const monthOptions = useMemo(() => {
     const keys = new Set<string>();
@@ -300,6 +346,13 @@ export default function Dashboard() {
   }, [accountPosts]);
   const maxTrendScore = monthlyTrend.reduce((m, [, v]) => Math.max(m, v.score), 0);
 
+  const onUnitChange = (v: string) => {
+    setSelectedUnit(v);
+    setSelectedAccount("Semua Akun");
+    setSelectedMonth("");
+    setCurrentPage(1);
+  };
+
   const onAccountChange = (v: string) => {
     setSelectedAccount(v);
     setSelectedMonth("");
@@ -311,6 +364,7 @@ export default function Dashboard() {
   const currentPosts = filteredPosts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const filterDesc = [
+    selectedUnit !== "Semua Unit" ? formatUnitDisplay(selectedUnit) : null,
     selectedAccount !== "Semua Akun" ? accountLabel(selectedAccount) : null,
     selectedMonth ? monthLabel(selectedMonth) : null,
   ].filter(Boolean).join(" • ");
@@ -370,6 +424,22 @@ export default function Dashboard() {
         </div>
       )}      <section style={{ marginBottom: "24px" }}>
         <div className="glass-panel" style={{ padding: "16px 20px", display: "flex", gap: "16px", alignItems: "flex-end", flexWrap: "wrap" }}>
+          {unitsWithCounts.length > 0 && (
+            <div>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Unit</label>
+              <select
+                value={selectedUnit}
+                onChange={(e) => onUnitChange(e.target.value)}
+                className="input-field"
+                style={{ minWidth: "180px" }}
+              >
+                <option value="Semua Unit">Semua Unit</option>
+                {unitsWithCounts.map(([unit, count]) => (
+                  <option key={unit} value={unit}>{formatUnitDisplay(unit)} ({count} akun)</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Akun</label>
             <select
@@ -379,7 +449,7 @@ export default function Dashboard() {
               style={{ minWidth: "180px" }}
             >
               <option value="Semua Akun">Semua Akun</option>
-              {availableAccounts.map((acc) => (
+              {unitAccounts.map((acc) => (
                 <option key={acc} value={acc}>{accountLabel(acc)}</option>
               ))}
             </select>
