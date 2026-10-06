@@ -14,6 +14,8 @@ interface SubMenu {
   adminOnly?: boolean;
   /** Hanya super admin (administrator). */
   superAdminOnly?: boolean;
+  /** Hanya role unit (staff/team_leader/asman) + administrator. Disembunyikan dari admin_uid. */
+  unitOnly?: boolean;
 }
 
 interface MainMenu {
@@ -32,10 +34,10 @@ const MENUS: MainMenu[] = [
     icon: "📱",
     children: [
       { name: "Skoring Medsos", href: "/dashboard", icon: "📊", desc: "Live monitoring & ringkasan" },
-      { name: "Input Medmas", href: "/dashboard/medmas", icon: "📰", desc: "Pemberitaan media massa" },
+      { name: "Input Medmas", href: "/dashboard/medmas", icon: "📰", desc: "Pemberitaan media massa", unitOnly: true },
       { name: "Rekap Bulanan", href: "/dashboard/rekap", icon: "📑", desc: "Medmas + Medsos per bulan" },
-      { name: "Draf Saya", href: "/dashboard/drafts", icon: "📝", desc: "Buat rencana postingan" },
-      { name: "Review Draf", href: "/admin/drafts", icon: "✅", desc: "Validasi ajuan user", adminOnly: true },
+      { name: "Draf Saya", href: "/dashboard/drafts", icon: "📝", desc: "Buat rencana postingan", unitOnly: true },
+      { name: "Review Draf", href: "/admin/drafts", icon: "✅", desc: "Validasi ajuan user", superAdminOnly: true },
       { name: "Kelola Target", href: "/admin/target", icon: "⚙️", desc: "Atur target tiap akun", adminOnly: true },
     ],
   },
@@ -107,6 +109,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const isAdmin = user?.role === "administrator" || user?.role === "admin_uid" || user?.role === "admin";
   const isSuperAdmin = user?.role === "administrator" || user?.role === "admin";
+  const isUnitRole = user?.role === "staff" || user?.role === "team_leader" || user?.role === "asman";
   // Default: semua menu utama tertutup; hanya terbuka saat diklik,
   // atau otomatis saat salah satu sub menu-nya sedang aktif.
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -164,7 +167,7 @@ export default function Sidebar() {
 
             // Menu utama dengan sub menu (akordeon)
             const visibleSubs = menu.children.filter(
-              (s) => (!s.adminOnly || isAdmin) && (!s.superAdminOnly || isSuperAdmin)
+              (s) => (!s.adminOnly || isAdmin) && (!s.superAdminOnly || isSuperAdmin) && (!s.unitOnly || isUnitRole || isSuperAdmin)
             );
             if (visibleSubs.length === 0) return null;
             const expanded = isExpanded(menu);
