@@ -65,7 +65,8 @@ export default function EvpPage() {
   const [kota, setKota] = useState("");
   const [kecamatan, setKecamatan] = useState("");
   const [kelurahan, setKelurahan] = useState("");
-  // Dropdown berjenjang (API wilayah gratis). Gagal dimuat = fallback teks bebas.
+  // Dropdown berjenjang (API wilayah gratis). Tiap level yang gagal dimuat
+  // otomatis jadi teks bebas agar form tetap bisa diisi.
   const [provList, setProvList] = useState<Wilayah[]>([]);
   const [kotaList, setKotaList] = useState<Wilayah[]>([]);
   const [kecList, setKecList] = useState<Wilayah[]>([]);
@@ -75,7 +76,9 @@ export default function EvpPage() {
   const [kecId, setKecId] = useState("");
   const [kelId, setKelId] = useState("");
   const [wilLoading, setWilLoading] = useState("");
-  const [wilFallback, setWilFallback] = useState(false);
+  const [kotaText, setKotaText] = useState(false);
+  const [kecText, setKecText] = useState(false);
+  const [kelText, setKelText] = useState(false);
   const [evidenFile, setEvidenFile] = useState<File | null>(null);
   const [tanggal, setTanggal] = useState(today());
   const [deskripsi, setDeskripsi] = useState("");
@@ -94,28 +97,31 @@ export default function EvpPage() {
     if (user.unitId) setUpDetail((v) => v || formatUnitDisplay(user.unitId));
   }, [user]);
 
-  // Muat daftar provinsi sekali saat halaman dibuka.
+  // Muat daftar provinsi sekali saat halaman dibuka (ada bawaan statis).
   useEffect(() => {
-    getProvinces()
-      .then(setProvList)
-      .catch(() => setWilFallback(true));
+    getProvinces().then(setProvList).catch(() => setProvList([]));
   }, []);
 
   const pickName = (list: Wilayah[], id: string) =>
     list.find((w) => w.id === id)?.name || "";
 
-  const onProvChange = async (id: string) => {
-    setProvId(id);
-    setProvinsi(pickName(provList, id));
+  const resetBelowKota = () => {
     setKotaId(""); setKota(""); setKotaList([]);
     setKecId(""); setKecamatan(""); setKecList([]);
     setKelId(""); setKelurahan(""); setKelList([]);
+  };
+
+  const onProvChange = async (id: string) => {
+    setProvId(id);
+    setProvinsi(pickName(provList, id));
+    resetBelowKota();
     if (!id) return;
     try {
       setWilLoading("kota");
       setKotaList(await getRegencies(id));
+      setKotaText(false); setKecText(false); setKelText(false);
     } catch {
-      setWilFallback(true);
+      setKotaText(true); setKecText(true); setKelText(true);
     } finally {
       setWilLoading("");
     }
@@ -130,8 +136,9 @@ export default function EvpPage() {
     try {
       setWilLoading("kecamatan");
       setKecList(await getDistricts(id));
+      setKecText(false); setKelText(false);
     } catch {
-      setWilFallback(true);
+      setKecText(true); setKelText(true);
     } finally {
       setWilLoading("");
     }
@@ -145,8 +152,9 @@ export default function EvpPage() {
     try {
       setWilLoading("kelurahan");
       setKelList(await getVillages(id));
+      setKelText(false);
     } catch {
-      setWilFallback(true);
+      setKelText(true);
     } finally {
       setWilLoading("");
     }
@@ -354,48 +362,47 @@ export default function EvpPage() {
             <Field label="Nama Program" span={12}>
               <input className="input-field" placeholder="Nama program volunteer" value={namaProgram} onChange={(e) => setNamaProgram(e.target.value)} />
             </Field>
-            {wilFallback ? (
-              <>
-                <Field label="Provinsi" span={6}>
-                  <input className="input-field" placeholder="cth: Banten" value={provinsi} onChange={(e) => setProvinsi(e.target.value)} />
-                </Field>
-                <Field label="Kabupaten/Kota" span={6}>
-                  <input className="input-field" placeholder="cth: Kota Tangerang Selatan" value={kota} onChange={(e) => setKota(e.target.value)} />
-                </Field>
-                <Field label="Kecamatan" span={6}>
-                  <input className="input-field" placeholder="cth: Pondok Aren" value={kecamatan} onChange={(e) => setKecamatan(e.target.value)} />
-                </Field>
-                <Field label="Kelurahan/Desa" span={6}>
-                  <input className="input-field" placeholder="cth: Pondok Aren" value={kelurahan} onChange={(e) => setKelurahan(e.target.value)} />
-                </Field>
-              </>
+            <Field label="Provinsi" span={6}>
+              <select className="input-field" value={provId} onChange={(e) => onProvChange(e.target.value)}>
+                <option value="">— Pilih Provinsi —</option>
+                {provList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+            </Field>
+            {kotaText ? (
+              <Field label="Kabupaten/Kota" span={6} hint="Daftar tidak termuat — isi manual">
+                <input className="input-field" placeholder="cth: Kota Tangerang Selatan" value={kota} onChange={(e) => setKota(e.target.value)} />
+              </Field>
             ) : (
-              <>
-                <Field label="Provinsi" span={6}>
-                  <select className="input-field" value={provId} onChange={(e) => onProvChange(e.target.value)}>
-                    <option value="">— Pilih Provinsi —</option>
-                    {provList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </select>
-                </Field>
-                <Field label="Kabupaten/Kota" span={6} hint={wilLoading === "kota" ? "Memuat..." : undefined}>
-                  <select className="input-field" value={kotaId} onChange={(e) => onKotaChange(e.target.value)} disabled={!provId}>
-                    <option value="">— Pilih Kota/Kab —</option>
-                    {kotaList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </select>
-                </Field>
-                <Field label="Kecamatan" span={6} hint={wilLoading === "kecamatan" ? "Memuat..." : undefined}>
-                  <select className="input-field" value={kecId} onChange={(e) => onKecChange(e.target.value)} disabled={!kotaId}>
-                    <option value="">— Pilih Kecamatan —</option>
-                    {kecList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </select>
-                </Field>
-                <Field label="Kelurahan/Desa" span={6} hint={wilLoading === "kelurahan" ? "Memuat..." : undefined}>
-                  <select className="input-field" value={kelId} onChange={(e) => onKelChange(e.target.value)} disabled={!kecId}>
-                    <option value="">— Pilih Kelurahan —</option>
-                    {kelList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </select>
-                </Field>
-              </>
+              <Field label="Kabupaten/Kota" span={6} hint={wilLoading === "kota" ? "Memuat..." : undefined}>
+                <select className="input-field" value={kotaId} onChange={(e) => onKotaChange(e.target.value)} disabled={!provId}>
+                  <option value="">— Pilih Kota/Kab —</option>
+                  {kotaList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </Field>
+            )}
+            {kecText ? (
+              <Field label="Kecamatan" span={6} hint="Daftar tidak termuat — isi manual">
+                <input className="input-field" placeholder="cth: Pondok Aren" value={kecamatan} onChange={(e) => setKecamatan(e.target.value)} />
+              </Field>
+            ) : (
+              <Field label="Kecamatan" span={6} hint={wilLoading === "kecamatan" ? "Memuat..." : undefined}>
+                <select className="input-field" value={kecId} onChange={(e) => onKecChange(e.target.value)} disabled={!kotaId}>
+                  <option value="">— Pilih Kecamatan —</option>
+                  {kecList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </Field>
+            )}
+            {kelText ? (
+              <Field label="Kelurahan/Desa" span={6} hint="Daftar tidak termuat — isi manual">
+                <input className="input-field" placeholder="cth: Pondok Aren" value={kelurahan} onChange={(e) => setKelurahan(e.target.value)} />
+              </Field>
+            ) : (
+              <Field label="Kelurahan/Desa" span={6} hint={wilLoading === "kelurahan" ? "Memuat..." : undefined}>
+                <select className="input-field" value={kelId} onChange={(e) => onKelChange(e.target.value)} disabled={!kecId}>
+                  <option value="">— Pilih Kelurahan —</option>
+                  {kelList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </Field>
             )}
             <Field
               label="Eviden Kegiatan (tampilan saja)"
