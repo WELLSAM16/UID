@@ -7,8 +7,8 @@
  * disimpan di koleksi `pumk_visits` agar kelak langsung mengisi status
  * monitoring tanpa rekap manual spreadsheet.
  *
- * Dokumen bukti (Form O, bukti bayar) untuk sementara ditempel sebagai link
- * (mis. Drive); upload ke Storage sistem menyusul.
+ * Dokumen bukti (Form O, bukti bayar) diupload ke Firebase Storage
+ * internal proyek via lib/storage.ts (PDF/gambar, maks 10 MB).
  */
 
 export type PumkVisitStatus = "draft" | "pending" | "approved" | "rejected";

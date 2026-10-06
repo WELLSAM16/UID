@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/authContext";
+import { uploadVisitEvidence, validateStorageFile } from "@/lib/storage";
 import {
   KOLEKTIBILITAS_OPTIONS,
   TINDAK_LANJUT_OPTIONS,
@@ -67,9 +68,10 @@ export default function PumkKunjunganPage() {
   const [jenis, setJenis] = useState("Inventarisasi");
   const [lokasiUrl, setLokasiUrl] = useState("");
   const [kondisiMitra, setKondisiMitra] = useState("");
-  const [formOUrl, setFormOUrl] = useState("");
-  const [dokumenLainUrl, setDokumenLainUrl] = useState("");
-  const [buktiBayarUrl, setBuktiBayarUrl] = useState("");
+  // Dokumen diupload langsung ke Storage internal (bukan tempel link).
+  const [formOFile, setFormOFile] = useState<File | null>(null);
+  const [dokumenLainFile, setDokumenLainFile] = useState<File | null>(null);
+  const [buktiBayarFile, setBuktiBayarFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   const isAdmin = user?.role === "administrator" || user?.role === "admin_uid" || (user?.role as string) === "admin";
@@ -125,8 +127,11 @@ export default function PumkKunjunganPage() {
     setNoId(""); setNamaMitra(""); setKolektibilitas("Masalah");
     setSaldoPokok(""); setSaldoJasa(""); setTotalSaldo("");
     setJenis("Inventarisasi"); setLokasiUrl(""); setKondisiMitra("");
-    setFormOUrl(""); setDokumenLainUrl(""); setBuktiBayarUrl("");
+    setFormOFile(null); setDokumenLainFile(null); setBuktiBayarFile(null);
   };
+
+  const fileLabel = (f: File | null) =>
+    f ? `${f.name} (${(f.size / 1024).toFixed(0)} KB)` : "Belum ada file";
 
   const handleCreate = async () => {
     const pokok = Number(saldoPokok || 0);
@@ -136,19 +141,51 @@ export default function PumkKunjunganPage() {
       setError("Tanggal kunjungan, Nomor ID, dan Nama Mitra wajib diisi.");
       return;
     }
+    if (jenis === "Inventarisasi" && (!lokasiUrl.trim() || !kondisiMitra)) {
+      setError("Lokasi Mitra dan Kondisi Mitra wajib untuk Inventarisasi.");
+      return;
+    }
+    // Validasi file sebelum POST agar tidak ada draf yatim tanpa bukti wajib.
+    for (const [label, f] of [["Form O", formOFile], ["Dokumen lain", dokumenLainFile], ["Bukti bayar", buktiBayarFile]] as const) {
+      if (f) {
+        const err = validateStorageFile(f);
+        if (err) { setError(`${label}: ${err}`); return; }
+      }
+    }
+    if (jenis === "Penagihan" && !buktiBayarFile) {
+      setError("File bukti pembayaran wajib untuk Penagihan.");
+      return;
+    }
+    if (!user) { setError("Belum login."); return; }
     try {
       setSaving(true);
-      await callApi("/api/pumk-visits", "POST", {
+      setMsg("Menyimpan draf...");
+      const created = await callApi("/api/pumk-visits", "POST", {
         tanggalKunjungan: tanggal,
         noId, namaMitra, kolektibilitas,
         saldoPokok: pokok, saldoJasa: jasa, totalSaldo: total,
         jenisTindakLanjut: jenis,
         lokasiUrl: lokasiUrl || null,
         kondisiMitra: kondisiMitra || null,
-        formOUrl: formOUrl || null,
-        dokumenLainUrl: dokumenLainUrl || null,
-        buktiBayarUrl: buktiBayarUrl || null,
+        formOUrl: null,
+        dokumenLainUrl: null,
+        buktiBayarUrl: null,
       });
+      const visitId = String(created.id);
+      const urls: Record<string, string> = {};
+      const jobs: [string, File | null, "form-o" | "dokumen-lain" | "bukti-bayar", string][] = [
+        ["Mengunggah Form O...", formOFile, "form-o", "formOUrl"],
+        ["Mengunggah dokumen lain...", dokumenLainFile, "dokumen-lain", "dokumenLainUrl"],
+        ["Mengunggah bukti bayar...", buktiBayarFile, "bukti-bayar", "buktiBayarUrl"],
+      ];
+      for (const [label, f, kind, field] of jobs) {
+        if (!f) continue;
+        setMsg(label);
+        urls[field] = await uploadVisitEvidence(user.uid, visitId, kind, f);
+      }
+      if (Object.keys(urls).length > 0) {
+        await callApi(`/api/pumk-visits/${visitId}`, "PATCH", urls);
+      }
       setMsg("Laporan kunjungan tersimpan sebagai draf.");
       resetForm();
       await loadData();
@@ -271,23 +308,27 @@ export default function PumkKunjunganPage() {
                 </select>
               </div>
               <div style={{ flex: "1 1 220px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Link Form O (opsional)</label>
-                <input className="input-field" placeholder="https://…" value={formOUrl} onChange={(e) => setFormOUrl(e.target.value.trim())} style={{ width: "100%" }} />
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>File Form O — PDF/gambar maks 10 MB (opsional)</label>
+                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFormOFile(e.target.files?.[0] || null)} style={{ width: "100%" }} />
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>{fileLabel(formOFile)}</div>
               </div>
               <div style={{ flex: "1 1 220px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Link dokumen lain (opsional)</label>
-                <input className="input-field" placeholder="https://…" value={dokumenLainUrl} onChange={(e) => setDokumenLainUrl(e.target.value.trim())} style={{ width: "100%" }} />
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>File dokumen lain (opsional)</label>
+                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setDokumenLainFile(e.target.files?.[0] || null)} style={{ width: "100%" }} />
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>{fileLabel(dokumenLainFile)}</div>
               </div>
             </div>
           ) : (
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end", marginTop: "12px" }}>
               <div style={{ flex: "1 1 220px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Link bukti pembayaran piutang</label>
-                <input className="input-field" placeholder="https://…" value={buktiBayarUrl} onChange={(e) => setBuktiBayarUrl(e.target.value.trim())} style={{ width: "100%" }} />
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>File bukti pembayaran piutang (wajib)</label>
+                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setBuktiBayarFile(e.target.files?.[0] || null)} style={{ width: "100%" }} />
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>{fileLabel(buktiBayarFile)}</div>
               </div>
               <div style={{ flex: "1 1 220px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Link Form O (opsional)</label>
-                <input className="input-field" placeholder="https://…" value={formOUrl} onChange={(e) => setFormOUrl(e.target.value.trim())} style={{ width: "100%" }} />
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>File Form O — PDF/gambar maks 10 MB (opsional)</label>
+                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFormOFile(e.target.files?.[0] || null)} style={{ width: "100%" }} />
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>{fileLabel(formOFile)}</div>
               </div>
             </div>
           )}
@@ -298,7 +339,7 @@ export default function PumkKunjunganPage() {
             </button>
           </div>
           <p style={{ marginTop: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-            Nomor ID mengacu ke Database PUMK (master read-only). Dokumen ditempel sebagai link sampai upload Storage tersedia.
+            Nomor ID mengacu ke Database PUMK (master read-only). File terupload ke Storage internal proyek (PDF/gambar, maks 10 MB per file).
           </p>
         </section>
       )}
@@ -341,7 +382,14 @@ export default function PumkKunjunganPage() {
                 <tr key={v.id} style={{ borderBottom: "1px solid var(--card-border)" }}>
                   <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>{v.tanggalKunjungan}</td>
                   <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>{v.noId}</td>
-                  <td style={{ padding: "10px 12px" }}>{v.namaMitra}</td>
+                  <td style={{ padding: "10px 12px" }}>
+                    <div>{v.namaMitra}</div>
+                    <div style={{ marginTop: "4px", display: "flex", gap: "8px", fontSize: "0.75rem" }}>
+                      {v.formOUrl && <a href={v.formOUrl} target="_blank" rel="noopener noreferrer">Form O</a>}
+                      {v.buktiBayarUrl && <a href={v.buktiBayarUrl} target="_blank" rel="noopener noreferrer">Bukti bayar</a>}
+                      {v.dokumenLainUrl && <a href={v.dokumenLainUrl} target="_blank" rel="noopener noreferrer">Dok. lain</a>}
+                    </div>
+                  </td>
                   <td style={{ padding: "10px 12px" }}>{v.kolektibilitas}</td>
                   <td style={{ padding: "10px 12px" }}>{v.jenisTindakLanjut}</td>
                   <td style={{ padding: "10px 12px", fontWeight: 600, whiteSpace: "nowrap" }}>Rp{rupiah(v.totalSaldo)}</td>
