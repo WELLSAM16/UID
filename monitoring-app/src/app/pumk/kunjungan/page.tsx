@@ -209,6 +209,41 @@ export default function PumkKunjunganPage() {
 
   const rupiah = (n: number) => Number(n || 0).toLocaleString("id-ID");
 
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    marginBottom: "6px",
+    fontSize: "0.85rem",
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  };
+
+  const hintStyle: React.CSSProperties = {
+    fontSize: "0.75rem",
+    color: "var(--text-muted)",
+    marginTop: "4px",
+  };
+
+  /** Satu field dalam grid 12 kolom. */
+  const Field = ({
+    label,
+    hint,
+    span,
+    children,
+  }: {
+    label: string;
+    hint?: string;
+    span: 3 | 4 | 6 | 8 | 12;
+    children: React.ReactNode;
+  }) => (
+    <div className={`kspan-${span}`}>
+      <label style={labelStyle} title={label}>{label}</label>
+      {children}
+      {hint && <div style={hintStyle}>{hint}</div>}
+    </div>
+  );
+
   return (
     <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
       <header style={{ marginBottom: "24px" }}>
@@ -232,81 +267,66 @@ export default function PumkKunjunganPage() {
       {canInput && (
         <section className="glass-panel" style={{ padding: "20px 24px", marginBottom: "24px" }}>
           <h2 style={{ margin: "0 0 16px 0", fontSize: "1.05rem", fontWeight: 700 }}>Tambah Laporan Kunjungan</h2>
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
-            <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Tanggal kunjungan</label>
+          <div className="kunj-grid">
+            <Field label="Tanggal kunjungan" span={3}>
               <input className="input-field" type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Nomor ID</label>
-              <input className="input-field" placeholder="Kunci ke Database PUMK" value={noId} onChange={(e) => setNoId(e.target.value)} style={{ minWidth: "160px" }} />
-            </div>
-            <div style={{ flex: "1 1 200px" }}>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Nama Mitra</label>
-              <input className="input-field" placeholder="Nama mitra binaan" value={namaMitra} onChange={(e) => setNamaMitra(e.target.value)} style={{ width: "100%" }} />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Kolektibilitas</label>
+            </Field>
+            <Field label="Nomor ID" span={3} hint="Kunci ke Database PUMK">
+              <input className="input-field" placeholder="cth: 01-01-396/96" value={noId} onChange={(e) => setNoId(e.target.value)} />
+            </Field>
+            <Field label="Nama Mitra" span={6}>
+              <input className="input-field" placeholder="Nama mitra binaan" value={namaMitra} onChange={(e) => setNamaMitra(e.target.value)} />
+            </Field>
+            <Field label="Kolektibilitas" span={3}>
               <select className="input-field" value={kolektibilitas} onChange={(e) => setKolektibilitas(e.target.value)}>
                 {KOLEKTIBILITAS_OPTIONS.map((k) => <option key={k} value={k}>{k}</option>)}
               </select>
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Saldo Pokok</label>
-              <input className="input-field" type="number" min="0" placeholder="cth: 15000000" value={saldoPokok} onChange={(e) => setSaldoPokok(e.target.value)} style={{ width: "150px" }} />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Saldo Jasa</label>
-              <input className="input-field" type="number" min="0" placeholder="cth: 15000000" value={saldoJasa} onChange={(e) => setSaldoJasa(e.target.value)} style={{ width: "150px" }} />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Total Saldo (kosong = otomatis)</label>
-              <input className="input-field" type="number" min="0" placeholder={String(Number(saldoPokok || 0) + Number(saldoJasa || 0))} value={totalSaldo} onChange={(e) => setTotalSaldo(e.target.value)} style={{ width: "150px" }} />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Jenis Tindak Lanjut</label>
+            </Field>
+            <Field label="Saldo Pokok" span={3}>
+              <input className="input-field" type="number" min="0" placeholder="cth: 15000000" value={saldoPokok} onChange={(e) => setSaldoPokok(e.target.value)} />
+            </Field>
+            <Field label="Saldo Jasa" span={3}>
+              <input className="input-field" type="number" min="0" placeholder="cth: 15000000" value={saldoJasa} onChange={(e) => setSaldoJasa(e.target.value)} />
+            </Field>
+            <Field label="Total Saldo" span={3} hint="Kosong = pokok + jasa otomatis">
+              <input className="input-field" type="number" min="0" placeholder={String(Number(saldoPokok || 0) + Number(saldoJasa || 0))} value={totalSaldo} onChange={(e) => setTotalSaldo(e.target.value)} />
+            </Field>
+            <Field label="Jenis Tindak Lanjut" span={4}>
               <select className="input-field" value={jenis} onChange={(e) => setJenis(e.target.value)}>
                 {TINDAK_LANJUT_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
-            </div>
+            </Field>
           </div>
 
+          <h3 style={{ margin: "20px 0 12px 0", fontSize: "0.95rem", fontWeight: 700 }}>
+            {jenis === "Inventarisasi" ? "Hasil Inventarisasi" : "Hasil Penagihan"}
+          </h3>
           {jenis === "Inventarisasi" ? (
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end", marginTop: "12px" }}>
-              <div style={{ flex: "1 1 220px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Lokasi Mitra (titik Google Maps)</label>
-                <input className="input-field" placeholder="https://maps…" value={lokasiUrl} onChange={(e) => setLokasiUrl(e.target.value.trim())} style={{ width: "100%" }} />
-              </div>
-              <div>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Kondisi Mitra</label>
+            <div className="kunj-grid">
+              <Field label="Lokasi Mitra" span={6} hint="Titik Google Maps">
+                <input className="input-field" placeholder="https://maps…" value={lokasiUrl} onChange={(e) => setLokasiUrl(e.target.value.trim())} />
+              </Field>
+              <Field label="Kondisi Mitra" span={6}>
                 <select className="input-field" value={kondisiMitra} onChange={(e) => setKondisiMitra(e.target.value)}>
                   <option value="">— Pilih —</option>
                   {KONDISI_MITRA_OPTIONS.map((k) => <option key={k} value={k}>{k}</option>)}
                 </select>
-              </div>
-              <div style={{ flex: "1 1 220px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>File Form O — PDF/gambar maks 10 MB (opsional)</label>
-                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFormOFile(e.target.files?.[0] || null)} style={{ width: "100%" }} />
-                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>{fileLabel(formOFile)}</div>
-              </div>
-              <div style={{ flex: "1 1 220px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>File dokumen lain (opsional)</label>
-                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setDokumenLainFile(e.target.files?.[0] || null)} style={{ width: "100%" }} />
-                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>{fileLabel(dokumenLainFile)}</div>
-              </div>
+              </Field>
+              <Field label="File Form O (opsional)" span={6} hint={fileLabel(formOFile)}>
+                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFormOFile(e.target.files?.[0] || null)} />
+              </Field>
+              <Field label="File dokumen lain (opsional)" span={6} hint={fileLabel(dokumenLainFile)}>
+                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setDokumenLainFile(e.target.files?.[0] || null)} />
+              </Field>
             </div>
           ) : (
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end", marginTop: "12px" }}>
-              <div style={{ flex: "1 1 220px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>File bukti pembayaran piutang (wajib)</label>
-                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setBuktiBayarFile(e.target.files?.[0] || null)} style={{ width: "100%" }} />
-                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>{fileLabel(buktiBayarFile)}</div>
-              </div>
-              <div style={{ flex: "1 1 220px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>File Form O — PDF/gambar maks 10 MB (opsional)</label>
-                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFormOFile(e.target.files?.[0] || null)} style={{ width: "100%" }} />
-                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>{fileLabel(formOFile)}</div>
-              </div>
+            <div className="kunj-grid">
+              <Field label="File bukti pembayaran (wajib)" span={6} hint={fileLabel(buktiBayarFile)}>
+                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setBuktiBayarFile(e.target.files?.[0] || null)} />
+              </Field>
+              <Field label="File Form O (opsional)" span={6} hint={fileLabel(formOFile)}>
+                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFormOFile(e.target.files?.[0] || null)} />
+              </Field>
             </div>
           )}
 
@@ -398,6 +418,27 @@ export default function PumkKunjunganPage() {
           </table>
         </div>
       </section>
+
+      <style>{`
+        .kunj-grid {
+          display: grid;
+          grid-template-columns: repeat(12, minmax(0, 1fr));
+          gap: 12px 14px;
+        }
+        .kunj-grid .kspan-3 { grid-column: span 3; }
+        .kunj-grid .kspan-4 { grid-column: span 4; }
+        .kunj-grid .kspan-6 { grid-column: span 6; }
+        .kunj-grid .kspan-8 { grid-column: span 8; }
+        .kunj-grid .kspan-12 { grid-column: span 12; }
+        .kunj-grid .input-field { width: 100%; box-sizing: border-box; }
+        @media (max-width: 900px) {
+          .kunj-grid .kspan-3, .kunj-grid .kspan-4 { grid-column: span 6; }
+          .kunj-grid .kspan-6, .kunj-grid .kspan-8 { grid-column: span 12; }
+        }
+        @media (max-width: 600px) {
+          .kunj-grid > div { grid-column: span 12 !important; }
+        }
+      `}</style>
     </div>
   );
 }
