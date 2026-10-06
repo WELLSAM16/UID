@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/authContext";
-import { uploadVisitEvidence, validateStorageFile } from "@/lib/storage";
 import {
   KOLEKTIBILITAS_OPTIONS,
   TINDAK_LANJUT_OPTIONS,
@@ -145,22 +144,15 @@ export default function PumkKunjunganPage() {
       setError("Lokasi Mitra dan Kondisi Mitra wajib untuk Inventarisasi.");
       return;
     }
-    // Validasi file sebelum POST agar tidak ada draf yatim tanpa bukti wajib.
-    for (const [label, f] of [["Form O", formOFile], ["Dokumen lain", dokumenLainFile], ["Bukti bayar", buktiBayarFile]] as const) {
-      if (f) {
-        const err = validateStorageFile(f);
-        if (err) { setError(`${label}: ${err}`); return; }
-      }
-    }
     if (jenis === "Penagihan" && !buktiBayarFile) {
       setError("File bukti pembayaran wajib untuk Penagihan.");
       return;
     }
-    if (!user) { setError("Belum login."); return; }
     try {
       setSaving(true);
-      setMsg("Menyimpan draf...");
-      const created = await callApi("/api/pumk-visits", "POST", {
+      // Kerangka tampilan saja: file yang dipilih BELUM diupload ke mana pun.
+      // URL bukti dikosongkan; upload Storage diaktifkan belakangan.
+      await callApi("/api/pumk-visits", "POST", {
         tanggalKunjungan: tanggal,
         noId, namaMitra, kolektibilitas,
         saldoPokok: pokok, saldoJasa: jasa, totalSaldo: total,
@@ -171,22 +163,7 @@ export default function PumkKunjunganPage() {
         dokumenLainUrl: null,
         buktiBayarUrl: null,
       });
-      const visitId = String(created.id);
-      const urls: Record<string, string> = {};
-      const jobs: [string, File | null, "form-o" | "dokumen-lain" | "bukti-bayar", string][] = [
-        ["Mengunggah Form O...", formOFile, "form-o", "formOUrl"],
-        ["Mengunggah dokumen lain...", dokumenLainFile, "dokumen-lain", "dokumenLainUrl"],
-        ["Mengunggah bukti bayar...", buktiBayarFile, "bukti-bayar", "buktiBayarUrl"],
-      ];
-      for (const [label, f, kind, field] of jobs) {
-        if (!f) continue;
-        setMsg(label);
-        urls[field] = await uploadVisitEvidence(user.uid, visitId, kind, f);
-      }
-      if (Object.keys(urls).length > 0) {
-        await callApi(`/api/pumk-visits/${visitId}`, "PATCH", urls);
-      }
-      setMsg("Laporan kunjungan tersimpan sebagai draf.");
+      setMsg("Laporan kunjungan tersimpan sebagai draf. (Upload file belum aktif — tampilan saja.)");
       resetForm();
       await loadData();
     } catch (err: any) {
@@ -339,7 +316,7 @@ export default function PumkKunjunganPage() {
             </button>
           </div>
           <p style={{ marginTop: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-            Nomor ID mengacu ke Database PUMK (master read-only). File terupload ke Storage internal proyek (PDF/gambar, maks 10 MB per file).
+            Nomor ID mengacu ke Database PUMK (master read-only). Pilih file hanya tampilan — upload belum aktif.
           </p>
         </section>
       )}
