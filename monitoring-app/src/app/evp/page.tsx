@@ -38,11 +38,6 @@ function currentMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function today(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 export default function EvpPage() {
   const { user, getToken } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
@@ -57,9 +52,9 @@ export default function EvpPage() {
   const [namaPegawai, setNamaPegawai] = useState("");
   const [nip, setNip] = useState("");
   const [noHp, setNoHp] = useState("");
-  const [unitAsal, setUnitAsal] = useState("UID Jakarta Raya");
+  const [unitAsal, setUnitAsal] = useState("UID JAKARTA RAYA");
   const [upDetail, setUpDetail] = useState("");
-  const [kategori, setKategori] = useState("Pendidikan");
+  const [kategori, setKategori] = useState("");
   const [namaProgram, setNamaProgram] = useState("");
   const [provinsi, setProvinsi] = useState("");
   const [kota, setKota] = useState("");
@@ -84,7 +79,7 @@ export default function EvpPage() {
   const [kecText, setKecText] = useState(false);
   const [kelText, setKelText] = useState(false);
   const [evidenFile, setEvidenFile] = useState<File | null>(null);
-  const [tanggal, setTanggal] = useState(today());
+  const [tanggal, setTanggal] = useState("");
   const [deskripsi, setDeskripsi] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -211,7 +206,7 @@ export default function EvpPage() {
     setProvId(""); setKotaId(""); setKecId(""); setKelId("");
     setKotaList([]); setKecList([]); setKelList([]);
     setDistMap({}); setVilMap({}); setKotaText(false); setKecText(false); setKelText(false);
-    setEvidenFile(null); setDeskripsi(""); setKategori("Pendidikan");
+    setEvidenFile(null); setDeskripsi(""); setKategori(""); setTanggal("");
   };
 
   const handleCreate = async () => {
@@ -221,6 +216,14 @@ export default function EvpPage() {
     }
     if (!provinsi.trim() || !kota.trim() || !kecamatan.trim() || !kelurahan.trim()) {
       setError("Lokasi kegiatan (provinsi/kota/kecamatan/kelurahan) wajib diisi.");
+      return;
+    }
+    if (!kategori) {
+      setError("Kategori program wajib dipilih.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) {
+      setError("Tanggal pelaksanaan wajib diisi.");
       return;
     }
     try {
@@ -283,7 +286,8 @@ export default function EvpPage() {
     display: "block",
     marginBottom: "6px",
     fontSize: "0.85rem",
-    fontWeight: 600,
+    fontWeight: 500,
+    color: "#0284c7",
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -334,78 +338,82 @@ export default function EvpPage() {
       )}
 
       {canInput && (
-        <section className="glass-panel" style={{ padding: "20px 24px", marginBottom: "24px" }}>
-          <h2 style={{ margin: "0 0 16px 0", fontSize: "1.05rem", fontWeight: 700 }}>Tambah Laporan EVP</h2>
+        <section className="glass-panel" style={{ padding: "24px 28px", marginBottom: "24px", background: "#fff" }}>
+          <h2 style={{ margin: "0 0 20px 0", fontSize: "1.15rem", fontWeight: 700, textAlign: "center", color: "#1f2937" }}>Laporan Employee Volunteer Program TJSL PLN APPS</h2>
           <div className="kunj-grid">
             <Field label="Nama Pegawai" span={6}>
-              <input className="input-field" placeholder="Nama pegawai" value={namaPegawai} onChange={(e) => setNamaPegawai(e.target.value)} />
+              <input className="input-field" value={namaPegawai} onChange={(e) => setNamaPegawai(e.target.value)} />
             </Field>
             <Field label="NIP" span={6}>
-              <input className="input-field" placeholder="NIP pegawai" value={nip} onChange={(e) => setNip(e.target.value)} />
+              <input className="input-field" value={nip} onChange={(e) => setNip(e.target.value)} />
             </Field>
-            <Field label="No HP" span={6}>
-              <input className="input-field" placeholder="cth: 0812…" value={noHp} onChange={(e) => setNoHp(e.target.value)} />
+            <Field label="No Hp" span={6}>
+              <input className="input-field" value={noHp} onChange={(e) => setNoHp(e.target.value)} />
             </Field>
             <Field label="Unit Asal" span={6}>
-              <input className="input-field" placeholder="cth: UID Jakarta Raya" value={unitAsal} onChange={(e) => setUnitAsal(e.target.value)} />
+              <select className="input-field" value={unitAsal} onChange={(e) => setUnitAsal(e.target.value)}>
+                <option value="UID JAKARTA RAYA">UID JAKARTA RAYA</option>
+                {UNIT_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
             </Field>
             <Field label="UP3/UPT/UPP/UPDL/Sektor" span={6}>
-              <input className="input-field" placeholder="cth: UP3 Bintaro" value={upDetail} onChange={(e) => setUpDetail(e.target.value)} />
+              <input className="input-field" value={upDetail} onChange={(e) => setUpDetail(e.target.value)} />
             </Field>
             <Field label="Kategori Program" span={6}>
               <select className="input-field" value={kategori} onChange={(e) => setKategori(e.target.value)}>
+                <option value="">Pilih...</option>
                 {EVP_KATEGORI.map((k) => <option key={k} value={k}>{k}</option>)}
               </select>
             </Field>
-            <Field label="Nama Program" span={12}>
-              <input className="input-field" placeholder="Nama program volunteer" value={namaProgram} onChange={(e) => setNamaProgram(e.target.value)} />
+            <Field label="Nama Program" span={6}>
+              <input className="input-field" value={namaProgram} onChange={(e) => setNamaProgram(e.target.value)} />
             </Field>
-            <Field label="Provinsi" span={6}>
+            <Field label="Lokasi Kegiatan (Provinsi)" span={6}>
               <select className="input-field" value={provId} onChange={(e) => onProvChange(e.target.value)}>
-                <option value="">— Pilih Provinsi —</option>
+                <option value="">Pilih Provinsi...</option>
                 {provList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </Field>
             {kotaText ? (
-              <Field label="Kabupaten/Kota" span={6} hint="Daftar tidak termuat — isi manual">
-                <input className="input-field" placeholder="cth: Kota Tangerang Selatan" value={kota} onChange={(e) => setKota(e.target.value)} />
+              <Field label="Lokasi Kegiatan (Kabupaten/Kota)" span={6} hint="Daftar tidak termuat — isi manual">
+                <input className="input-field" value={kota} onChange={(e) => setKota(e.target.value)} />
               </Field>
             ) : (
-              <Field label="Kabupaten/Kota" span={6} hint={wilLoading === "kota" ? "Memuat..." : undefined}>
+              <Field label="Lokasi Kegiatan (Kabupaten/Kota)" span={6} hint={wilLoading === "kota" ? "Memuat..." : undefined}>
                 <select className="input-field" value={kotaId} onChange={(e) => onKotaChange(e.target.value)} disabled={!provId}>
-                  <option value="">— Pilih Kota/Kab —</option>
+                  <option value="">Pilih...</option>
                   {kotaList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                 </select>
               </Field>
             )}
             {kecText ? (
-              <Field label="Kecamatan" span={6} hint="Daftar tidak termuat — isi manual">
-                <input className="input-field" placeholder="cth: Pondok Aren" value={kecamatan} onChange={(e) => setKecamatan(e.target.value)} />
+              <Field label="Lokasi Kegiatan (Kecamatan)" span={6} hint="Daftar tidak termuat — isi manual">
+                <input className="input-field" value={kecamatan} onChange={(e) => setKecamatan(e.target.value)} />
               </Field>
             ) : (
-              <Field label="Kecamatan" span={6} hint={wilLoading === "kecamatan" ? "Memuat..." : undefined}>
+              <Field label="Lokasi Kegiatan (Kecamatan)" span={6} hint={wilLoading === "kecamatan" ? "Memuat..." : undefined}>
                 <select className="input-field" value={kecId} onChange={(e) => onKecChange(e.target.value)} disabled={!kotaId}>
-                  <option value="">— Pilih Kecamatan —</option>
+                  <option value="">Pilih...</option>
                   {kecList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                 </select>
               </Field>
             )}
             {kelText ? (
-              <Field label="Kelurahan/Desa" span={6} hint="Daftar tidak termuat — isi manual">
-                <input className="input-field" placeholder="cth: Pondok Aren" value={kelurahan} onChange={(e) => setKelurahan(e.target.value)} />
+              <Field label="Lokasi Kegiatan (Kelurahan)" span={6} hint="Daftar tidak termuat — isi manual">
+                <input className="input-field" value={kelurahan} onChange={(e) => setKelurahan(e.target.value)} />
               </Field>
             ) : (
-              <Field label="Kelurahan/Desa" span={6} hint={wilLoading === "kelurahan" ? "Memuat..." : undefined}>
+              <Field label="Lokasi Kegiatan (Kelurahan)" span={6} hint={wilLoading === "kelurahan" ? "Memuat..." : undefined}>
                 <select className="input-field" value={kelId} onChange={(e) => onKelChange(e.target.value)} disabled={!kecId}>
-                  <option value="">— Pilih Kelurahan —</option>
+                  <option value="">Pilih...</option>
                   {kelList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                 </select>
               </Field>
             )}
             <Field
-              label="Eviden Kegiatan (tampilan saja)"
+              label="Eviden Kegiatan"
               span={6}
-              hint={evidenFile ? `${evidenFile.name} (${(evidenFile.size / 1024).toFixed(0)} KB)` : "Belum ada file"}
+              hint={evidenFile ? `${evidenFile.name} (${(evidenFile.size / 1024).toFixed(0)} KB)` : undefined}
             >
               <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setEvidenFile(e.target.files?.[0] || null)} />
             </Field>
@@ -413,7 +421,7 @@ export default function EvpPage() {
               <input className="input-field" type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
             </Field>
             <Field label="Deskripsi Kegiatan" span={12}>
-              <textarea className="input-field" rows={4} placeholder="Isi deskripsi kegiatan…" value={deskripsi} onChange={(e) => setDeskripsi(e.target.value)} style={{ resize: "vertical" }} />
+              <textarea className="input-field" rows={6} value={deskripsi} onChange={(e) => setDeskripsi(e.target.value)} style={{ resize: "vertical" }} />
             </Field>
           </div>
 
