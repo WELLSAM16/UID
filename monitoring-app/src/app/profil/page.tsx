@@ -21,6 +21,13 @@ function ProfilContent() {
   return (
     <div style={{ maxWidth: "640px", margin: "0 auto" }}>
       <header style={{ marginBottom: "24px" }}>
+        <button
+          className="btn"
+          onClick={() => router.back()}
+          style={{ background: "white", border: "1px solid var(--card-border)", fontSize: "0.85rem", marginBottom: "12px" }}
+        >
+          ← Kembali
+        </button>
         <h1 style={{ fontSize: "2rem", margin: 0, color: "#111" }}>Profil Saya</h1>
         <p style={{ margin: "6px 0 0 0", fontSize: "0.9rem", color: "var(--text-muted)" }}>
           Data akun Anda yang terdaftar oleh admin.

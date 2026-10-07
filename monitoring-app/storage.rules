@@ -1,0 +1,52 @@
+rules_version = '2';
+
+// Bukti/dokumen sistem — Storage internal proyek (bukan Drive/eksternal).
+// Pola path: pumk-visits/{uid}/{visitId}/{kind}/{filename}
+//   kind: form-o | dokumen-lain | bukti-bayar (ditambah jenis lain menyusul).
+// Tulis: hanya pemilik path (uid == request.auth.uid), PDF/gambar <= 10 MB.
+// Baca: user login (pemilik, se-unit via profil, atau admin).
+// Tulis/atur lain: hanya via Admin SDK (tidak ada rule client).
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function role() {
+      return get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && role() in ["administrator", "admin_uid", "admin"];
+    }
+    function sameUnit(ownerUid) {
+      return signedIn()
+        && exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && exists(/databases/(default)/documents/users/$(ownerUid))
+        && get(/databases/(default)/documents/users/$(request.auth.uid)).data.unitId
+          == get(/databases/(default)/documents/users/$(ownerUid)).data.unitId;
+    }
+    function isPdfOrImage() {
+      return request.resource.contentType in [
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ];
+    }
+
+    match /pumk-visits/{ownerUid}/{allPaths=**} {
+      allow read: if signedIn()
+        && (request.auth.uid == ownerUid || sameUnit(ownerUid) || isAdmin());
+      allow write: if signedIn()
+        && request.auth.uid == ownerUid
+        && isPdfOrImage()
+        && request.resource.size <= 10 * 1024 * 1024;
+    }
+
+    // Default deny.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

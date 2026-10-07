@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/authContext";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ROLE_LABELS } from "@/lib/roles";
+import { ROLE_LABELS, formatUnitDisplay } from "@/lib/roles";
 
 interface SubMenu {
   name: string;
@@ -14,6 +14,8 @@ interface SubMenu {
   adminOnly?: boolean;
   /** Hanya super admin (administrator). */
   superAdminOnly?: boolean;
+  /** Hanya role unit (staff/team_leader/asman) + administrator. Disembunyikan dari admin_uid. */
+  unitOnly?: boolean;
 }
 
 interface MainMenu {
@@ -32,8 +34,10 @@ const MENUS: MainMenu[] = [
     icon: "📱",
     children: [
       { name: "Skoring Medsos", href: "/dashboard", icon: "📊", desc: "Live monitoring & ringkasan" },
-      { name: "Draf Saya", href: "/dashboard/drafts", icon: "📝", desc: "Buat rencana postingan" },
-      { name: "Review Draf", href: "/admin/drafts", icon: "✅", desc: "Validasi ajuan user", adminOnly: true },
+      { name: "Input Medmas", href: "/dashboard/medmas", icon: "📰", desc: "Pemberitaan media massa", unitOnly: true },
+      { name: "Rekap Bulanan", href: "/dashboard/rekap", icon: "📑", desc: "Medmas + Medsos per bulan" },
+      { name: "Draf Saya", href: "/dashboard/drafts", icon: "📝", desc: "Buat rencana postingan", unitOnly: true },
+      { name: "Review Draf", href: "/admin/drafts", icon: "✅", desc: "Validasi ajuan user", superAdminOnly: true },
       { name: "Kelola Target", href: "/admin/target", icon: "⚙️", desc: "Atur target tiap akun", adminOnly: true },
     ],
   },
@@ -52,6 +56,16 @@ const MENUS: MainMenu[] = [
     icon: "💰",
     children: [
       { name: "Monitoring PUMK", href: "/pumk/monitoring", icon: "📉", desc: "Tunggakan UP3 Bintaro dari database UID" },
+      { name: "Laporan Kunjungan", href: "/pumk/kunjungan", icon: "📝", desc: "Pengganti g-form laporan UMK" },
+    ],
+  },
+  {
+    name: "Stakeholder",
+    icon: "🤝",
+    children: [
+      { name: "Database Stakeholder", href: "/stakeholder/database", icon: "📇", desc: "Data + kelengkapan per unit" },
+      { name: "Realisasi Kegiatan", href: "/stakeholder/realisasi", icon: "📝", desc: "Input KPI 5 & 6 + bukti" },
+      { name: "Rekap KPI", href: "/stakeholder/rekap", icon: "📊", desc: "Capaian vs target per bulan" },
     ],
   },
   {
@@ -83,6 +97,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const isAdmin = user?.role === "administrator" || user?.role === "admin_uid" || user?.role === "admin";
   const isSuperAdmin = user?.role === "administrator" || user?.role === "admin";
+  const isUnitRole = user?.role === "staff" || user?.role === "team_leader" || user?.role === "asman";
   // Default: semua menu utama tertutup; hanya terbuka saat diklik,
   // atau otomatis saat salah satu sub menu-nya sedang aktif.
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -103,7 +118,7 @@ export default function Sidebar() {
         <div className="sidebar-header" style={{ padding: "0 24px", marginBottom: "40px" }}>
           <div>
             <img src="/pln.svg" alt="Logo PLN" style={{ width: "130px", height: "auto", display: "block" }} />
-            <div style={{ marginTop: "8px", fontSize: "1.25rem", fontWeight: 700, color: "#111", whiteSpace: "nowrap" }}>UP3 Bintaro</div>
+            <div style={{ marginTop: "8px", fontSize: "1.25rem", fontWeight: 700, color: "#111", whiteSpace: "nowrap" }}>{formatUnitDisplay(user?.unitId)}</div>
             {user?.name && <div style={{ marginTop: "6px", fontSize: "0.9rem", fontWeight: 600, color: "#111" }}>{user.name}</div>}
             <p style={{ fontSize: "0.8rem", marginTop: "5px" }}>
               Role: <span style={{ color: isAdmin ? "var(--danger)" : "var(--success)", fontWeight: "bold" }}>{ROLE_LABELS[user?.role || ""] || user?.role}</span>
@@ -140,7 +155,7 @@ export default function Sidebar() {
 
             // Menu utama dengan sub menu (akordeon)
             const visibleSubs = menu.children.filter(
-              (s) => (!s.adminOnly || isAdmin) && (!s.superAdminOnly || isSuperAdmin)
+              (s) => (!s.adminOnly || isAdmin) && (!s.superAdminOnly || isSuperAdmin) && (!s.unitOnly || isUnitRole || isSuperAdmin)
             );
             if (visibleSubs.length === 0) return null;
             const expanded = isExpanded(menu);
