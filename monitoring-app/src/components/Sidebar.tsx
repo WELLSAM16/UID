@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/authContext";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ROLE_LABELS, formatUnitDisplay } from "@/lib/roles";
+import { ROLE_LABELS, formatUnitDisplay, type Role } from "@/lib/roles";
 
 interface SubMenu {
   name: string;
@@ -16,6 +16,8 @@ interface SubMenu {
   superAdminOnly?: boolean;
   /** Hanya role unit (staff/team_leader/asman) + administrator. Disembunyikan dari admin_uid. */
   unitOnly?: boolean;
+  /** Batasi ke role tertentu (administrator selalu lolos, mengikuti ProtectedRoute). */
+  allowedRoles?: Role[];
 }
 
 interface MainMenu {
@@ -65,8 +67,8 @@ const MENUS: MainMenu[] = [
     children: [
       { name: "Database Stakeholder", href: "/stakeholder/database", icon: "📇", desc: "Data + kelengkapan per unit" },
       { name: "Realisasi Kegiatan", href: "/stakeholder/realisasi", icon: "📝", desc: "Input KPI 5 & 6 + bukti" },
-      { name: "Review Asman", href: "/stakeholder/review", icon: "🔍", desc: "ACC / tolak kiriman TL" },
-      { name: "Evaluasi UID", href: "/stakeholder/evaluasi", icon: "✅", desc: "Evaluasi final lintas unit" },
+      { name: "Review Asman", href: "/stakeholder/review", icon: "🔍", desc: "ACC / tolak kiriman TL", allowedRoles: ["asman"] },
+      { name: "Evaluasi UID", href: "/stakeholder/evaluasi", icon: "✅", desc: "Evaluasi final lintas unit", allowedRoles: ["admin_uid"] },
       { name: "Rekap KPI", href: "/stakeholder/rekap", icon: "📊", desc: "Capaian vs target per bulan" },
     ],
   },
@@ -156,9 +158,17 @@ export default function Sidebar() {
             }
 
             // Menu utama dengan sub menu (akordeon)
-            const visibleSubs = menu.children.filter(
-              (s) => (!s.adminOnly || isAdmin) && (!s.superAdminOnly || isSuperAdmin) && (!s.unitOnly || isUnitRole || isSuperAdmin)
-            );
+            const visibleSubs = menu.children.filter((s) => {
+              if (s.superAdminOnly && !isSuperAdmin) return false;
+              if (s.adminOnly && !isAdmin) return false;
+              if (s.unitOnly && !(isUnitRole || isSuperAdmin)) return false;
+              if (s.allowedRoles && s.allowedRoles.length > 0) {
+                // administrator selalu lolos (sama seperti ProtectedRoute)
+                if (isSuperAdmin) return true;
+                if (!user?.role || !s.allowedRoles.includes(user.role as Role)) return false;
+              }
+              return true;
+            });
             if (visibleSubs.length === 0) return null;
             const expanded = isExpanded(menu);
             const activeParent = isChildActive(menu);
