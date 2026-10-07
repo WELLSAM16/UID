@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/authContext";
 import {
   capForKpi,
@@ -31,24 +31,40 @@ interface LocalEntry extends EntryDraft {
   evidenceNames: string[];
 }
 
-const inputStyle: CSSProperties = {
-  width: "100%",
-  padding: "10px 12px",
-  borderRadius: "10px",
-  border: "1px solid var(--card-border)",
-  background: "var(--card-bg, #fff)",
-  fontSize: "0.875rem",
-  boxSizing: "border-box",
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  marginBottom: "6px",
+  fontSize: "0.85rem",
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
-const labelStyle: CSSProperties = {
-  display: "block",
+const hintStyle: React.CSSProperties = {
   fontSize: "0.75rem",
-  fontWeight: 700,
-  letterSpacing: "0.04em",
   color: "var(--text-muted)",
-  marginBottom: "6px",
+  marginTop: "4px",
 };
+
+/** Satu field dalam grid 12 kolom (pola form kunjungan PUMK). */
+const Field = ({
+  label,
+  hint,
+  span,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  span: 3 | 4 | 6 | 8 | 12;
+  children: React.ReactNode;
+}) => (
+  <div className={`kspan-${span}`}>
+    <label style={labelStyle} title={label}>{label}</label>
+    {children}
+    {hint && <div style={hintStyle}>{hint}</div>}
+  </div>
+);
 
 /**
  * Pengisian KPI 5 & 6 — pengganti sheet.
@@ -171,121 +187,128 @@ export default function StakeholderRealisasiPage() {
         </div>
       </header>
 
-      {/* Periode */}
-      <section className="glass-panel" style={{ padding: "20px 24px", marginBottom: "24px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-          <div>
-            <label style={labelStyle}>BULAN</label>
-            <select value={bulan} onChange={(e) => setBulan(Number(e.target.value))} style={inputStyle}>
-              {MONTHS.map((m, i) => (
-                <option key={m} value={i + 1}>{m}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>TAHUN</label>
-            <input type="number" value={tahun} onChange={(e) => setTahun(Number(e.target.value))} style={inputStyle} />
-          </div>
-        </div>
-      </section>
-
-      {/* Form tambah kegiatan */}
+      {/* Form tambah kegiatan (pola form kunjungan PUMK: grid 12 kolom + seksi berjudul) */}
       <section className="glass-panel" style={{ padding: "20px 24px", marginBottom: "24px" }}>
         <h2 style={{ margin: "0 0 16px 0", fontSize: "1.05rem", fontWeight: 700 }}>
           Tambah kegiatan
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-          <div>
-            <label style={labelStyle}>JENIS KEGIATAN</label>
-            <select value={activityKey} onChange={(e) => setActivityKey(e.target.value)} style={inputStyle}>
+        <h3 style={{ margin: "0 0 12px 0", fontSize: "0.95rem", fontWeight: 700 }}>
+          Periode pelaporan
+        </h3>
+        <div className="kunj-grid">
+          <Field label="Bulan" span={4}>
+            <select className="input-field" value={bulan} onChange={(e) => setBulan(Number(e.target.value))}>
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i + 1}>{m}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Tahun" span={4}>
+            <input className="input-field" type="number" value={tahun} onChange={(e) => setTahun(Number(e.target.value))} />
+          </Field>
+          <Field label="Tanggal kegiatan" span={4}>
+            <input className="input-field" type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
+          </Field>
+        </div>
+
+        <h3 style={{ margin: "20px 0 12px 0", fontSize: "0.95rem", fontWeight: 700 }}>
+          Jenis kegiatan
+        </h3>
+        <div className="kunj-grid">
+          <Field label="Jenis kegiatan" span={8} hint={draftQuadrant ? `Kuadran ${draftQuadrant} → KPI ${draftKpi}` : "Pilih pengaruh & kepentingan untuk melihat kuadran"}>
+            <select className="input-field" value={activityKey} onChange={(e) => setActivityKey(e.target.value)}>
               {activities.map((a) => (
                 <option key={a.key} value={a.key}>
                   {a.label} ({a.quadrant} • {a.targetLabel})
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <label style={labelStyle}>TANGGAL</label>
-            <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} style={inputStyle} />
-          </div>
+          </Field>
+          <Field label="Target" span={4} hint={`Cluster ${cluster} • cap ${Math.round(capForKpi(kpi) * 100)}%`}>
+            <input className="input-field" value={targetOf(activityKey)} disabled readOnly />
+          </Field>
         </div>
-        <div style={{ marginBottom: "16px" }}>
-          <label style={labelStyle}>JUDUL KEGIATAN (MIN. 10 KARAKTER)</label>
-          <input
-            value={judul}
-            onChange={(e) => setJudul(e.target.value)}
-            placeholder="cth: Pertemuan informal monitoring pemakaian kompor listrik Ibu Diana"
-            style={inputStyle}
-          />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-          <div>
-            <label style={labelStyle}>TINGKAT PENGARUH</label>
-            <select value={pengaruh} onChange={(e) => setPengaruh(e.target.value as InfluenceLevel)} style={inputStyle}>
+
+        <h3 style={{ margin: "20px 0 12px 0", fontSize: "0.95rem", fontWeight: 700 }}>
+          Klasifikasi stakeholder
+        </h3>
+        <div className="kunj-grid">
+          <Field label="Tingkat pengaruh" span={6}>
+            <select className="input-field" value={pengaruh} onChange={(e) => setPengaruh(e.target.value as InfluenceLevel)}>
               <option value="">— pilih —</option>
               {INFLUENCE_LEVELS.map((l) => (
                 <option key={l} value={l}>{l}</option>
               ))}
             </select>
-          </div>
-          <div>
-            <label style={labelStyle}>TINGKAT KEPENTINGAN</label>
-            <select value={kepentingan} onChange={(e) => setKepentingan(e.target.value as InterestLevel)} style={inputStyle}>
+          </Field>
+          <Field label="Tingkat kepentingan" span={6}>
+            <select className="input-field" value={kepentingan} onChange={(e) => setKepentingan(e.target.value as InterestLevel)}>
               <option value="">— pilih —</option>
               {INTEREST_LEVELS.map((l) => (
                 <option key={l} value={l}>{l}</option>
               ))}
             </select>
-          </div>
+          </Field>
         </div>
         {draftQuadrant && (
-          <p style={{ margin: "0 0 16px 0", fontSize: "0.82rem", color: draftKpi === kpi ? "var(--success)" : "var(--danger)" }}>
+          <p style={{ margin: "8px 0 0 0", fontSize: "0.82rem", color: draftKpi === kpi ? "var(--success)" : "var(--danger)" }}>
             Sistem: kuadran <b>{draftQuadrant}</b> → KPI <b>{draftKpi}</b> • Cluster {cluster} • target{" "}
             <b>{targetOf(activityKey)}</b>/bulan
             {draftKpi !== kpi && ` — kombinasi ini di luar KPI ${kpi}.`}
           </p>
         )}
-        <div style={{ marginBottom: "16px" }}>
-          <label style={labelStyle}>KETERANGAN KEPENTINGAN (MIN. 20 KARAKTER)</label>
-          <textarea
-            value={keterangan}
-            onChange={(e) => setKeterangan(e.target.value)}
-            rows={3}
-            placeholder="Jelaskan pengaruh dan kepentingan stakeholder terhadap program PLN"
-            style={{ ...inputStyle, resize: "vertical" }}
-          />
-        </div>
-        <div style={{ marginBottom: "16px" }}>
-          <label style={labelStyle}>BUKTI (PDF/GAMBAR, MAKS. 10 MB/FILE)</label>
-          <input
-            type="file"
-            multiple
-            accept=".pdf,.jpg,.jpeg,.png,.webp"
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-            style={inputStyle}
-          />
-          {files.length > 0 && (
-            <p style={{ margin: "8px 0 0 0", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-              {files.length} file dipilih: {files.map((f) => f.name).join(", ")}
-            </p>
-          )}
+
+        <h3 style={{ margin: "20px 0 12px 0", fontSize: "0.95rem", fontWeight: 700 }}>
+          Detail & bukti
+        </h3>
+        <div className="kunj-grid">
+          <Field label="Judul kegiatan (min. 10 karakter)" span={12}>
+            <input
+              className="input-field"
+              value={judul}
+              onChange={(e) => setJudul(e.target.value)}
+            />
+          </Field>
+          <Field label="Keterangan kepentingan (min. 20 karakter)" span={12}>
+            <textarea
+              className="input-field"
+              value={keterangan}
+              onChange={(e) => setKeterangan(e.target.value)}
+              rows={3}
+              style={{ resize: "vertical" }}
+            />
+          </Field>
+          <Field
+            label="Bukti (PDF/gambar, maks. 10 MB/file)"
+            span={12}
+            hint={files.length > 0 ? `${files.length} file dipilih: ${files.map((f) => f.name).join(", ")}` : undefined}
+          >
+            <input
+              className="input-field"
+              type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+            />
+          </Field>
         </div>
         {error && (
-          <p style={{ margin: "0 0 16px 0", fontSize: "0.85rem", color: "var(--danger)", fontWeight: 600 }}>
+          <p style={{ margin: "16px 0 0 0", fontSize: "0.85rem", color: "var(--danger)", fontWeight: 600 }}>
             {error}
           </p>
         )}
-        <button
-          onClick={handleAdd}
-          style={{
-            padding: "10px 20px", borderRadius: "10px", border: "none",
-            background: "var(--primary)", color: "#fff",
-            fontWeight: 700, fontSize: "0.875rem", cursor: "pointer",
-          }}
-        >
-          Tambah ke daftar
-        </button>
+        <div style={{ marginTop: "16px" }}>
+          <button
+            onClick={handleAdd}
+            style={{
+              padding: "10px 20px", borderRadius: "10px", border: "none",
+              background: "var(--primary)", color: "#fff",
+              fontWeight: 700, fontSize: "0.875rem", cursor: "pointer",
+            }}
+          >
+            Tambah ke daftar
+          </button>
+        </div>
       </section>
 
       {/* Ringkasan otomatis */}
@@ -389,6 +412,27 @@ export default function StakeholderRealisasiPage() {
           Kirim ke server (menyusul)
         </button>
       </section>
+
+      <style>{`
+        .kunj-grid {
+          display: grid;
+          grid-template-columns: repeat(12, minmax(0, 1fr));
+          gap: 12px 14px;
+        }
+        .kunj-grid .kspan-3 { grid-column: span 3; }
+        .kunj-grid .kspan-4 { grid-column: span 4; }
+        .kunj-grid .kspan-6 { grid-column: span 6; }
+        .kunj-grid .kspan-8 { grid-column: span 8; }
+        .kunj-grid .kspan-12 { grid-column: span 12; }
+        .kunj-grid .input-field { width: 100%; box-sizing: border-box; }
+        @media (max-width: 900px) {
+          .kunj-grid .kspan-3, .kunj-grid .kspan-4 { grid-column: span 6; }
+          .kunj-grid .kspan-6, .kunj-grid .kspan-8 { grid-column: span 12; }
+        }
+        @media (max-width: 600px) {
+          .kunj-grid > div { grid-column: span 12 !important; }
+        }
+      `}</style>
     </div>
   );
 }
