@@ -67,18 +67,74 @@ export interface Stakeholder {
   noHpPic?: string | null;
 }
 
-export type ActivityStatus = "draft" | "pending" | "approved" | "rejected";
+/* ------------------------------------------------------------------ */
+/* Alur review dua tingkat (disepakati):                               */
+/* TL isi (draft) → Asman review (ACC → acc_asman, tolak → revisi_tl)  */
+/* → TL kirim ke Admin UID (pending_admin) → Admin UID evaluasi final  */
+/* (lolos → approved, catatan → revisi_tl → TL perbaiki).               */
+/* ------------------------------------------------------------------ */
+
+export const ACTIVITY_STATUSES = [
+  "draft",
+  "pending_asman",
+  "revisi_tl",
+  "acc_asman",
+  "pending_admin",
+  "approved",
+] as const;
+export type ActivityStatus = (typeof ACTIVITY_STATUSES)[number];
+
+export const ACTIVITY_STATUS_LABELS: Record<ActivityStatus, string> = {
+  draft: "Draf TL",
+  pending_asman: "Menunggu review Asman",
+  revisi_tl: "Revisi TL",
+  acc_asman: "ACC Asman — siap ke Admin UID",
+  pending_admin: "Menunggu evaluasi Admin UID",
+  approved: "Lolos final",
+};
+
+/** Aktor yang boleh menggerakkan status (role disederhanakan). */
+export type ReviewActor = "tl" | "asman" | "admin_uid" | "administrator";
+
+/** Transisi yang boleh dilakukan aktor dari suatu status. */
+export function allowedTransitions(
+  from: ActivityStatus,
+  actor: ReviewActor
+): ActivityStatus[] {
+  if (actor === "administrator") return [...ACTIVITY_STATUSES];
+  if (actor === "tl") {
+    if (from === "draft" || from === "revisi_tl") return ["pending_asman"];
+    if (from === "acc_asman") return ["pending_admin"];
+    return [];
+  }
+  if (actor === "asman") {
+    if (from === "pending_asman") return ["acc_asman", "revisi_tl"];
+    return [];
+  }
+  if (actor === "admin_uid") {
+    if (from === "pending_admin") return ["approved", "revisi_tl"];
+    return [];
+  }
+  return [];
+}
 
 export interface StakeholderActivity {
   id: string;
   unitId: string;
   kpi: KpiNumber;
   activityKey: string;
+  quadrant: StakeholderQuadrant;
+  tanggal: string; // YYYY-MM-DD
+  judul: string;
+  keteranganKepentingan?: string;
   bulan: number; // 1-12
   tahun: number;
   jumlah: number;
   evidencePaths?: string[]; // path Firebase Storage (tanpa link eksternal)
+  legacyEvidenceUrls?: string[]; // link GDrive warisan sheet (sebelum migrasi)
   status: ActivityStatus;
+  asmanNote?: string | null;
+  adminNote?: string | null;
   authorUid: string;
 }
 

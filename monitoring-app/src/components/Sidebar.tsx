@@ -65,6 +65,8 @@ const MENUS: MainMenu[] = [
     children: [
       { name: "Database Stakeholder", href: "/stakeholder/database", icon: "📇", desc: "Data + kelengkapan per unit" },
       { name: "Realisasi Kegiatan", href: "/stakeholder/realisasi", icon: "📝", desc: "Input KPI 5 & 6 + bukti" },
+      { name: "Review Asman", href: "/stakeholder/review", icon: "🔍", desc: "ACC / tolak kiriman TL" },
+      { name: "Evaluasi UID", href: "/stakeholder/evaluasi", icon: "✅", desc: "Evaluasi final lintas unit" },
       { name: "Rekap KPI", href: "/stakeholder/rekap", icon: "📊", desc: "Capaian vs target per bulan" },
     ],
   },
