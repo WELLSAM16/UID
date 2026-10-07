@@ -3,14 +3,17 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { useAuth } from "@/lib/authContext";
 import {
-  ACHIEVEMENT_CAP,
+  capForKpi,
+  clusterForUnit,
+  targetFor,
   INTEREST_LEVELS,
   INFLUENCE_LEVELS,
   achievementPercent,
   buildActivityPayload,
-  kpi6Activities,
-  kpiForQuadrant,
+  kpiActivities,
+  kpiForQuadrantStrict,
   quadrantFor,
+  realisasiLevel,
   validateEntryDraft,
   type EntryDraft,
   type InterestLevel,
@@ -48,19 +51,22 @@ const labelStyle: CSSProperties = {
 };
 
 /**
- * Kerangka pengisian KPI 6 (Keep Satisfied + Monitor).
+ * Pengisian KPI 5 & 6 — pengganti sheet.
  * Satu entri = satu kegiatan; JUMLAH otomatis dari banyaknya entri.
  * Bukti baru berupa file (validasi tipe/ukuran); upload Storage + API
  * (/api/stakeholder-activities) menyusul — tombol kirim disabled dan
  * payload siap kirim ditampilkan sebagai pratinjau JSON.
+ * Target mengikuti cluster unit (A/B); cap KPI 5 = 110%, KPI 6 = 100%.
  */
 export default function StakeholderRealisasiPage() {
   const { user } = useAuth();
   const now = new Date();
   const [bulan, setBulan] = useState(now.getMonth() + 1);
   const [tahun, setTahun] = useState(now.getFullYear());
+  const [kpi, setKpi] = useState<5 | 6>(6);
 
-  const activities = useMemo(() => kpi6Activities(), []);
+  const activities = useMemo(() => kpiActivities(kpi), [kpi]);
+  const cluster = clusterForUnit(user?.unitId);
   const [activityKey, setActivityKey] = useState(activities[0]?.key ?? "");
   const [tanggal, setTanggal] = useState(now.toISOString().slice(0, 10));
   const [judul, setJudul] = useState("");
@@ -73,7 +79,13 @@ export default function StakeholderRealisasiPage() {
 
   const draftQuadrant =
     pengaruh && kepentingan ? quadrantFor(pengaruh, kepentingan) : null;
-  const draftKpi = draftQuadrant ? kpiForQuadrant(draftQuadrant) : null;
+  const draftKpi = draftQuadrant ? kpiForQuadrantStrict(draftQuadrant) : null;
+
+  const targetOf = (key: string) => {
+    const base = activities.find((a) => a.key === key)?.target ?? 0;
+    const t = targetFor(kpi, key, cluster);
+    return t > 0 ? t : base;
+  };
 
   const countFor = (key: string) =>
     entries.filter((e) => e.activityKey === key).length;
@@ -82,7 +94,7 @@ export default function StakeholderRealisasiPage() {
     const draft: EntryDraft = {
       activityKey, tanggal, judul, pengaruh, kepentingan, keterangan,
     };
-    const err = validateEntryDraft(draft);
+    const err = validateEntryDraft(draft, kpi);
     if (err) {
       setError(err);
       return;
@@ -124,12 +136,39 @@ export default function StakeholderRealisasiPage() {
     <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
       <header style={{ marginBottom: "24px" }}>
         <h1 style={{ fontSize: "2rem", margin: 0, color: "#111" }}>
-          Realisasi KPI 6
+          Realisasi KPI {kpi}
         </h1>
         <p style={{ margin: "6px 0 0 0", fontSize: "0.9rem", color: "var(--text-muted)" }}>
-          Unit: <b>{user?.unitId || "-"}</b> • Keep Satisfied + Monitor
-          (Audiensi, Sapa Personal, Share WAG, Influencer)
+          Unit: <b>{user?.unitId || "-"}</b> • Cluster {cluster} •{" "}
+          {kpi === 5 ? "Manage Closely + Keep Informed" : "Keep Satisfied + Monitor"} • cap{" "}
+          {Math.round(capForKpi(kpi) * 100)}%
         </p>
+        <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
+          {[5, 6].map((v) => (
+            <button
+              key={v}
+              onClick={() => {
+                setKpi(v as 5 | 6);
+                const first = kpiActivities(v as 5 | 6)[0]?.key ?? "";
+                setActivityKey(first);
+                setEntries([]);
+                setError(null);
+              }}
+              style={{
+                padding: "8px 16px",
+                borderRadius: "10px",
+                border: "1px solid var(--card-border)",
+                background: kpi === v ? "var(--primary)" : "transparent",
+                color: kpi === v ? "#fff" : "var(--text-muted)",
+                fontWeight: 700,
+                fontSize: "0.82rem",
+                cursor: "pointer",
+              }}
+            >
+              KPI {v}
+            </button>
+          ))}
+        </div>
       </header>
 
       {/* Periode */}
@@ -201,9 +240,10 @@ export default function StakeholderRealisasiPage() {
           </div>
         </div>
         {draftQuadrant && (
-          <p style={{ margin: "0 0 16px 0", fontSize: "0.82rem", color: draftKpi === 6 ? "var(--success)" : "var(--danger)" }}>
-            Sistem: kuadran <b>{draftQuadrant}</b> → KPI <b>{draftKpi}</b>
-            {draftKpi !== 6 && " — kombinasi ini di luar KPI 6."}
+          <p style={{ margin: "0 0 16px 0", fontSize: "0.82rem", color: draftKpi === kpi ? "var(--success)" : "var(--danger)" }}>
+            Sistem: kuadran <b>{draftQuadrant}</b> → KPI <b>{draftKpi}</b> • Cluster {cluster} • target{" "}
+            <b>{targetOf(activityKey)}</b>/bulan
+            {draftKpi !== kpi && ` — kombinasi ini di luar KPI ${kpi}.`}
           </p>
         )}
         <div style={{ marginBottom: "16px" }}>
@@ -254,12 +294,12 @@ export default function StakeholderRealisasiPage() {
           Ringkasan {MONTHS[bulan - 1]} {tahun}
         </h2>
         <p style={{ margin: "0 0 16px 0", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-          JUMLAH otomatis dari entri • capaian cap {Math.round(ACHIEVEMENT_CAP * 100)}%
+          JUMLAH otomatis dari entri • capaian cap {Math.round(capForKpi(kpi) * 100)}% • Level 1-5 (4 = target)
         </p>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid var(--card-border)" }}>
-              {["KEGIATAN", "TARGET", "JUMLAH", "CAPAIAN"].map((c) => (
+              {["KEGIATAN", "TARGET", "JUMLAH", "CAPAIAN", "LEVEL"].map((c) => (
                 <th key={c} style={{ padding: "10px 12px", textAlign: "left", color: "var(--text-muted)", fontSize: "0.72rem", letterSpacing: "0.06em" }}>{c}</th>
               ))}
             </tr>
@@ -267,16 +307,21 @@ export default function StakeholderRealisasiPage() {
           <tbody>
             {activities.map((a) => {
               const jumlah = countFor(a.key);
-              const capaian = achievementPercent(jumlah, a.target);
+              const target = targetFor(kpi, a.key, cluster);
+              const capaian = achievementPercent(jumlah, target, kpi);
+              const level = realisasiLevel(jumlah, target);
               return (
                 <tr key={a.key} style={{ borderBottom: "1px solid var(--card-border)" }}>
                   <td style={{ padding: "10px 12px", fontWeight: 600 }}>
                     {a.label} <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>({a.targetLabel})</span>
                   </td>
-                  <td style={{ padding: "10px 12px" }}>{a.target}</td>
+                  <td style={{ padding: "10px 12px" }}>{target}</td>
                   <td style={{ padding: "10px 12px", fontWeight: 700 }}>{jumlah}</td>
-                  <td style={{ padding: "10px 12px", color: jumlah >= a.target ? "var(--success)" : "var(--danger)", fontWeight: 600 }}>
+                  <td style={{ padding: "10px 12px", color: jumlah >= target ? "var(--success)" : "var(--danger)", fontWeight: 600 }}>
                     {capaian.toFixed(0)}%
+                  </td>
+                  <td style={{ padding: "10px 12px", fontWeight: 700, color: level >= 4 ? "var(--success)" : level === 3 ? "var(--warning)" : "var(--danger)" }}>
+                    {level}
                   </td>
                 </tr>
               );

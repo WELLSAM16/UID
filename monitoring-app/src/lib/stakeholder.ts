@@ -1,12 +1,18 @@
 /**
- * Kerangka Stakeholder — integrasi KPI 5 & 6 (matriks Mendelow).
+ * Kerangka Stakeholder — pengganti spreadsheet KPI 5 & 6 (official UID).
  *
- * Sumber angka: spreadsheet KPI UID Jaya (Okt 2026).
- * - KPI 5 = kuadran Manage Closely + Keep Informed
- * - KPI 6 = kuadran Keep Satisfied + Monitor
- * Penilaian: % capaian = realisasi / target (cap 110%), dirata-rata berbobot.
+ * Penomoran resmi UID:
+ * - KPI 5 = Manage Closely + Keep Informed
+ * - KPI 6 = Keep Satisfied + Monitor
  *
- * Koleksi Firestore (API menyusul):
+ * Sumber angka: paparan SM I & Progja SM II 2026 + kedua sheet kertas kerja.
+ * - KPI 5, Level 4, Max 110%: Cluster A 5x/bln, 3x/sem, 7x/bln, 6x/bln;
+ *   Cluster B 4x/bln, 2x/sem, 5x/bln, 3x/bln.
+ * - KPI 6, Level 4, Max 100%: Cluster A 5x/bln, 7x/bln, 7x/bln, 2x/sem;
+ *   Cluster B 3x/bln, 5x/bln, 5x/bln, 1x/sem.
+ * - Level 5 = melebihi Level 4 (> target).
+ *
+ * Koleksi Firestore:
  * - stakeholders           : database stakeholder per unit
  * - stakeholder_activities : realisasi kegiatan per bulan + bukti Storage
  * - kpi_targets            : target & bobot (di-seed dari konstanta di bawah)
@@ -20,8 +26,71 @@ export const STAKEHOLDER_QUADRANTS = [
 ] as const;
 export type StakeholderQuadrant = (typeof STAKEHOLDER_QUADRANTS)[number];
 
+/** Nomor KPI resmi UID: 5|6. */
 export type KpiNumber = 5 | 6;
+/** Peta kode lama → resmi: 7→6 (dipakai bila tanpa konteks kuadran). */
+export const LEGACY_KPI_MAP: Record<number, KpiNumber> = { 7: 6 };
+/** Normalisasi nomor apa pun ke resmi; bila ada kuadran, kuadran menang. */
+export function normalizeKpi(kpi: number, quadrant?: StakeholderQuadrant): KpiNumber | null {
+  if (kpi === 5 || kpi === 6) {
+    if (quadrant) return kpiForQuadrantStrict(quadrant);
+    return kpi;
+  }
+  const mapped = LEGACY_KPI_MAP[kpi];
+  return mapped ?? null;
+}
+export function kpiForQuadrantStrict(q: StakeholderQuadrant): KpiNumber {
+  return q === "Manage Closely" || q === "Keep Informed" ? 5 : 6;
+}
+/** Kompat: nama lama, kini mengembalikan nomor resmi 5|6. */
+export function kpiForQuadrant(q: StakeholderQuadrant): KpiNumber | null {
+  return kpiForQuadrantStrict(q);
+}
+export type ClusterId = "A" | "B";
 export type ActivityPeriod = "bulanan" | "semesteran";
+
+/** UP2D Jakarta = Cluster B, sisanya (16 UP3 + UID) = Cluster A. */
+export function clusterForUnit(unitId?: string | null): ClusterId {
+  const v = (unitId || "").trim().toUpperCase().replace(/\s+/g, " ");
+  if (v === "UP2D" || v === "UP2D JAKARTA" || v === "UP2D JAYA") return "B";
+  return "A";
+}
+
+/** Target Level 4 per cluster — angka resmi paparan + sheet. */
+export const CLUSTER_TARGETS: Record<string, Record<ClusterId, number>> = {
+  "5:audiensi": { A: 5, B: 4 },
+  "5:event_bersama": { A: 3, B: 2 },
+  "5:share_wag": { A: 7, B: 5 },
+  "5:sosialisasi": { A: 6, B: 3 },
+  "6:audiensi": { A: 5, B: 3 },
+  "6:sapa_personal": { A: 7, B: 5 },
+  "6:share_wag": { A: 7, B: 5 },
+  "6:influencer": { A: 2, B: 1 },
+};
+export function targetFor(kpi: KpiNumber, activityKey: string, cluster: ClusterId): number {
+  return CLUSTER_TARGETS[`${kpi}:${activityKey}`]?.[cluster] ?? 0;
+}
+/** Cap % capaian: KPI 5 max 110%, KPI 6 max 100%. */
+export const KPI_CAPS: Record<KpiNumber, number> = { 5: 1.1, 6: 1.0 };
+export function capForKpi(kpi: KpiNumber): number {
+  return KPI_CAPS[kpi] ?? 1.0;
+}
+/** Level realisasi sheet: < target = di bawah 4; = target → 4; > target → 5. */
+export function realisasiLevel(jumlah: number, target: number): number {
+  if (jumlah >= target && target > 0) return jumlah > target ? 5 : 4;
+  if (jumlah >= Math.ceil(target * 0.85)) return 3;
+  if (jumlah > 0) return 2;
+  return 1;
+}
+/** Aturan penamaan kertas kerja + eviden sheet (diringkas, validasi lunak). */
+export const FILENAME_RULE =
+  "Format: Nama stakeholder_ Kegiatan_DDMMYYYY (cth: Camat Pondok Aren_Masak Asik Pakai Kompor Listrik_18062026)";
+export function validateJudulFormat(judul: string): string | null {
+  const v = (judul || "").trim();
+  if (!v.includes("_")) return `Judul wajib memakai underscore: ${FILENAME_RULE}`;
+  if (!/\d{6,8}\s*$/.test(v.replace(/[-/.]/g, ""))) return `Judul wajib diakhiri tanggal: ${FILENAME_RULE}`;
+  return null;
+}
 
 export interface KpiActivity {
   key: string;
@@ -35,25 +104,26 @@ export interface KpiActivity {
 }
 
 export const KPI_ACTIVITIES: KpiActivity[] = [
-  // KPI 5
-  { key: "audiensi", kpi: 5, quadrant: "Manage Closely", label: "Audiensi / Pertemuan Informal", target: 5, targetLabel: "5x per bulan", period: "bulanan", weight: 3 },
-  { key: "event_bersama", kpi: 5, quadrant: "Manage Closely", label: "Event Bersama", target: 3, targetLabel: "3x per semester", period: "semesteran", weight: 5 },
-  { key: "share_wag", kpi: 5, quadrant: "Keep Informed", label: "Share Informasi WAG", target: 7, targetLabel: "7x per bulan", period: "bulanan", weight: 1 },
-  { key: "sosialisasi", kpi: 5, quadrant: "Keep Informed", label: "Sosialisasi", target: 6, targetLabel: "6x per bulan", period: "bulanan", weight: 2 },
-  // KPI 6
-  { key: "audiensi", kpi: 6, quadrant: "Keep Satisfied", label: "Audiensi / Pertemuan Informal", target: 5, targetLabel: "5x per bulan", period: "bulanan", weight: 3 },
-  { key: "sapa_personal", kpi: 6, quadrant: "Keep Satisfied", label: "Sapa Personal", target: 7, targetLabel: "7x per bulan", period: "bulanan", weight: 1 },
-  { key: "share_wag", kpi: 6, quadrant: "Monitor", label: "Share Informasi WAG", target: 7, targetLabel: "7x per bulan", period: "bulanan", weight: 1 },
-  { key: "influencer", kpi: 6, quadrant: "Monitor", label: "Kerja Sama Influencer / Opinion Leader", target: 2, targetLabel: "2x per semester", period: "semesteran", weight: 5 },
+  // KPI 5 resmi (Manage Closely + Keep Informed) — target default Cluster A
+  { key: "audiensi", kpi: 5, quadrant: "Manage Closely", label: "Audiensi / Pertemuan Informal", target: 5, targetLabel: "5x per bulan (A) / 4x (B)", period: "bulanan", weight: 3 },
+  { key: "event_bersama", kpi: 5, quadrant: "Manage Closely", label: "Event Bersama", target: 3, targetLabel: "3x per semester (A) / 2x (B)", period: "semesteran", weight: 5 },
+  { key: "share_wag", kpi: 5, quadrant: "Keep Informed", label: "Share Informasi WAG", target: 7, targetLabel: "7x per bulan (A) / 5x (B)", period: "bulanan", weight: 1 },
+  { key: "sosialisasi", kpi: 5, quadrant: "Keep Informed", label: "Sosialisasi", target: 6, targetLabel: "6x per bulan (A) / 3x (B)", period: "bulanan", weight: 2 },
+  // KPI 6 resmi (Keep Satisfied + Monitor)
+  { key: "audiensi", kpi: 6, quadrant: "Keep Satisfied", label: "Audiensi / Pertemuan Informal", target: 5, targetLabel: "5x per bulan (A) / 3x (B)", period: "bulanan", weight: 3 },
+  { key: "sapa_personal", kpi: 6, quadrant: "Keep Satisfied", label: "Sapa Personal", target: 7, targetLabel: "7x per bulan (A) / 5x (B)", period: "bulanan", weight: 1 },
+  { key: "share_wag", kpi: 6, quadrant: "Monitor", label: "Share Informasi WAG", target: 7, targetLabel: "7x per bulan (A) / 5x (B)", period: "bulanan", weight: 1 },
+  { key: "influencer", kpi: 6, quadrant: "Monitor", label: "Kerja Sama Influencer / Opinion Leader", target: 2, targetLabel: "2x per semester (A) / 1x (B)", period: "semesteran", weight: 5 },
 ];
 
-/** Batas atas % capaian per aktivitas (contoh sheet: 110%). */
+/** Batas atas legacy (KPI 5 = 110%). Gunakan capForKpi untuk nilai resmi. */
 export const ACHIEVEMENT_CAP = 1.1;
 
-/** % capaian satu aktivitas, sudah di-cap. */
-export function achievementPercent(realisasi: number, target: number): number {
+/** % capaian satu aktivitas. Tanpa kpi → perilaku lama (cap 110%). */
+export function achievementPercent(realisasi: number, target: number, kpi?: KpiNumber): number {
   if (!target || target <= 0) return 0;
-  return Math.min(realisasi / target, ACHIEVEMENT_CAP) * 100;
+  const cap = kpi ? capForKpi(kpi) : ACHIEVEMENT_CAP;
+  return Math.min(realisasi / target, cap) * 100;
 }
 
 export interface Stakeholder {
@@ -139,14 +209,12 @@ export interface StakeholderActivity {
 }
 
 /* ------------------------------------------------------------------ */
-/* Kerangka pengisian KPI 6 (Keep Satisfied + Monitor).                */
-/*                                                                    */
-/* Alur workflow: TL mengisi satu entri per kegiatan (judul + tanggal  */
-/* + tingkat pengaruh/kepentingan + bukti). Sistem menurunkan kuadran  */
-/* otomatis dan menolak kombinasi yang masuk KPI 5. JUMLAH dihitung    */
-/* otomatis dari banyaknya entri (tidak diketik manual seperti sheet). */
-/* API Firestore (/api/stakeholder-activities) menyusul — payload di   */
-/* bawah sudah berbentuk siap kirim.                                   */
+/* Pengisian KPI 5 (Manage Closely + Keep Informed) & KPI 6 (Keep       */
+/* Satisfied + Monitor) — pengganti sheet. TL mengisi satu entri per    */
+/* kegiatan (judul format sheet + tanggal + pengaruh/kepentingan +      */
+/* keterangan + bukti). Sistem menurunkan kuadran otomatis. JUMLAH      */
+/* dihitung otomatis dari banyaknya entri (tidak diketik manual).      */
+/* API Firestore (/api/stakeholder-activities) menyusul.                */
 /* ------------------------------------------------------------------ */
 
 /** Tingkat pengaruh & kepentingan stakeholder (pengganti teks bebas). */
@@ -167,15 +235,17 @@ export function quadrantFor(
   return "Monitor";
 }
 
-/** Kuadran → nomor KPI (kuadran unik per KPI). */
-export function kpiForQuadrant(q: StakeholderQuadrant): KpiNumber | null {
-  const act = KPI_ACTIVITIES.find((a) => a.quadrant === q);
-  return act ? act.kpi : null;
+/** Daftar aktivitas per KPI resmi. */
+export function kpiActivities(kpi: KpiNumber): KpiActivity[] {
+  return KPI_ACTIVITIES.filter((a) => a.kpi === kpi);
 }
-
-/** Daftar aktivitas KPI 6 saja (form pengisian). */
+/** KPI 5 = Manage Closely + Keep Informed. */
+export function kpi5Activities(): KpiActivity[] {
+  return kpiActivities(5);
+}
+/** KPI 6 = Keep Satisfied + Monitor. */
 export function kpi6Activities(): KpiActivity[] {
-  return KPI_ACTIVITIES.filter((a) => a.kpi === 6);
+  return kpiActivities(6);
 }
 
 /** Satu entri kegiatan yang sedang diisi TL (belum terkirim). */
@@ -188,19 +258,21 @@ export interface EntryDraft {
   keterangan: string;
 }
 
-/** Validasi draf entri. Return pesan error atau null bila OK. */
-export function validateEntryDraft(d: EntryDraft): string | null {
-  if (!kpi6Activities().some((a) => a.key === d.activityKey))
-    return "Pilih jenis kegiatan KPI 6";
+/** Validasi draf entri untuk KPI target (default 6 agar form lama tetap jalan). */
+export function validateEntryDraft(d: EntryDraft, targetKpi: KpiNumber = 6): string | null {
+  if (!kpiActivities(targetKpi).some((a) => a.key === d.activityKey))
+    return `Pilih jenis kegiatan KPI ${targetKpi}`;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d.tanggal)) return "Tanggal tidak valid";
   if (d.judul.trim().length < 10) return "Judul kegiatan minimal 10 karakter";
+  const fmtErr = validateJudulFormat(d.judul);
+  if (fmtErr) return fmtErr;
   if (!d.pengaruh || !d.kepentingan)
     return "Pilih tingkat pengaruh dan kepentingan";
   if (d.keterangan.trim().length < 20)
     return "Keterangan minimal 20 karakter (agar tidak ditolak Asman)";
   const q = quadrantFor(d.pengaruh, d.kepentingan);
-  if (kpiForQuadrant(q) !== 6)
-    return `Kombinasi ini masuk kuadran ${q} (KPI 5). Halaman ini khusus KPI 6.`;
+  if (kpiForQuadrantStrict(q) !== targetKpi)
+    return `Kombinasi ini masuk kuadran ${q} (KPI ${kpiForQuadrantStrict(q)}). Halaman ini khusus KPI ${targetKpi}.`;
   return null;
 }
 
@@ -217,9 +289,10 @@ export function buildActivityPayload(d: EntryDraft, ctx: PayloadContext) {
     d.pengaruh as InfluenceLevel,
     d.kepentingan as InterestLevel
   );
+  const kpi = kpiForQuadrantStrict(quadrant);
   return {
     unitId: ctx.unitId,
-    kpi: 6 as const,
+    kpi,
     activityKey: d.activityKey,
     quadrant,
     tanggal: d.tanggal,
