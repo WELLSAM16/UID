@@ -81,3 +81,99 @@ export interface StakeholderActivity {
   status: ActivityStatus;
   authorUid: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Kerangka pengisian KPI 6 (Keep Satisfied + Monitor).                */
+/*                                                                    */
+/* Alur workflow: TL mengisi satu entri per kegiatan (judul + tanggal  */
+/* + tingkat pengaruh/kepentingan + bukti). Sistem menurunkan kuadran  */
+/* otomatis dan menolak kombinasi yang masuk KPI 5. JUMLAH dihitung    */
+/* otomatis dari banyaknya entri (tidak diketik manual seperti sheet). */
+/* API Firestore (/api/stakeholder-activities) menyusul — payload di   */
+/* bawah sudah berbentuk siap kirim.                                   */
+/* ------------------------------------------------------------------ */
+
+/** Tingkat pengaruh & kepentingan stakeholder (pengganti teks bebas). */
+export const INFLUENCE_LEVELS = ["rendah", "sedang", "tinggi"] as const;
+export type InfluenceLevel = (typeof INFLUENCE_LEVELS)[number];
+
+export const INTEREST_LEVELS = ["rendah", "sedang", "tinggi"] as const;
+export type InterestLevel = (typeof INTEREST_LEVELS)[number];
+
+/** Matriks Mendelow: pengaruh × kepentingan → kuadran. */
+export function quadrantFor(
+  pengaruh: InfluenceLevel,
+  kepentingan: InterestLevel
+): StakeholderQuadrant {
+  if (pengaruh === "tinggi" && kepentingan === "tinggi") return "Manage Closely";
+  if (pengaruh === "tinggi") return "Keep Satisfied";
+  if (kepentingan === "tinggi") return "Keep Informed";
+  return "Monitor";
+}
+
+/** Kuadran → nomor KPI (kuadran unik per KPI). */
+export function kpiForQuadrant(q: StakeholderQuadrant): KpiNumber | null {
+  const act = KPI_ACTIVITIES.find((a) => a.quadrant === q);
+  return act ? act.kpi : null;
+}
+
+/** Daftar aktivitas KPI 6 saja (form pengisian). */
+export function kpi6Activities(): KpiActivity[] {
+  return KPI_ACTIVITIES.filter((a) => a.kpi === 6);
+}
+
+/** Satu entri kegiatan yang sedang diisi TL (belum terkirim). */
+export interface EntryDraft {
+  activityKey: string;
+  tanggal: string; // YYYY-MM-DD
+  judul: string;
+  pengaruh: InfluenceLevel | "";
+  kepentingan: InterestLevel | "";
+  keterangan: string;
+}
+
+/** Validasi draf entri. Return pesan error atau null bila OK. */
+export function validateEntryDraft(d: EntryDraft): string | null {
+  if (!kpi6Activities().some((a) => a.key === d.activityKey))
+    return "Pilih jenis kegiatan KPI 6";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.tanggal)) return "Tanggal tidak valid";
+  if (d.judul.trim().length < 10) return "Judul kegiatan minimal 10 karakter";
+  if (!d.pengaruh || !d.kepentingan)
+    return "Pilih tingkat pengaruh dan kepentingan";
+  if (d.keterangan.trim().length < 20)
+    return "Keterangan minimal 20 karakter (agar tidak ditolak Asman)";
+  const q = quadrantFor(d.pengaruh, d.kepentingan);
+  if (kpiForQuadrant(q) !== 6)
+    return `Kombinasi ini masuk kuadran ${q} (KPI 5). Halaman ini khusus KPI 6.`;
+  return null;
+}
+
+export interface PayloadContext {
+  unitId: string;
+  authorUid: string;
+  bulan: number;
+  tahun: number;
+}
+
+/** Bentuk dokumen stakeholder_activities untuk API (satu dokumen = satu kegiatan). */
+export function buildActivityPayload(d: EntryDraft, ctx: PayloadContext) {
+  const quadrant = quadrantFor(
+    d.pengaruh as InfluenceLevel,
+    d.kepentingan as InterestLevel
+  );
+  return {
+    unitId: ctx.unitId,
+    kpi: 6 as const,
+    activityKey: d.activityKey,
+    quadrant,
+    tanggal: d.tanggal,
+    judul: d.judul.trim(),
+    keteranganKepentingan: d.keterangan.trim(),
+    bulan: ctx.bulan,
+    tahun: ctx.tahun,
+    jumlah: 1,
+    evidencePlaceholders: [] as string[],
+    status: "draft" as const,
+    authorUid: ctx.authorUid,
+  };
+}
