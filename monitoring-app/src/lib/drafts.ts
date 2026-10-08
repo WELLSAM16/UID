@@ -33,8 +33,16 @@ export interface DraftDoc {
   title: string;
   caption: string;
   accountTarget: string;
+  // LEGACY (tautan luar Drive): hanya dibaca untuk data lama. Form baru
+  // tidak lagi menerima link — pakai file upload Storage internal di bawah.
   mediaUrl?: string;
   docUrl?: string;
+  // Storage internal proyek (upload menyusul; untuk kini nama file dicatat).
+  // mediaPath = path Storage (content-drafts/...), mediaName = nama file asli.
+  mediaPath?: string;
+  mediaName?: string;
+  docPath?: string;
+  docName?: string;
   scheduledAt?: string;
   notes?: string;
   status: DraftStatus;
@@ -124,6 +132,10 @@ export function validateDraftFields(input: {
   accountTarget?: unknown;
   mediaUrl?: unknown;
   docUrl?: unknown;
+  mediaPath?: unknown;
+  mediaName?: unknown;
+  docPath?: unknown;
+  docName?: unknown;
   scheduledAt?: unknown;
   notes?: unknown;
 }): ValidationResult {
@@ -145,6 +157,21 @@ export function validateDraftFields(input: {
     return { ok: false, error: "mediaUrl harus URL http(s) yang valid" };
   if (!isValidUrlOrEmpty(input.docUrl))
     return { ok: false, error: "docUrl harus URL http(s) yang valid" };
+  // Field Storage internal: path + nama file asli (maks 500/120 karakter).
+  for (const [key, max] of [
+    ["mediaPath", 500],
+    ["docPath", 500],
+    ["mediaName", 120],
+    ["docName", 120],
+  ] as const) {
+    const v = (input as Record<string, unknown>)[key];
+    if (v !== undefined && v !== null && v !== "") {
+      if (typeof v !== "string" || !v.trim())
+        return { ok: false, error: `${key} harus berupa teks` };
+      if (v.trim().length > max)
+        return { ok: false, error: `${key} maksimal ${max} karakter` };
+    }
+  }
   if (
     input.scheduledAt !== undefined &&
     input.scheduledAt !== null &&
@@ -207,6 +234,10 @@ export function buildNewDraft(input: {
   accountTarget: string;
   mediaUrl?: string;
   docUrl?: string;
+  mediaPath?: string;
+  mediaName?: string;
+  docPath?: string;
+  docName?: string;
   scheduledAt?: string;
   notes?: string;
   authorUid: string;
@@ -220,6 +251,10 @@ export function buildNewDraft(input: {
     accountTarget: input.accountTarget.trim(),
     ...(input.mediaUrl?.trim() ? { mediaUrl: input.mediaUrl.trim() } : {}),
     ...(input.docUrl?.trim() ? { docUrl: input.docUrl.trim() } : {}),
+    ...(input.mediaPath?.trim() ? { mediaPath: input.mediaPath.trim() } : {}),
+    ...(input.mediaName?.trim() ? { mediaName: input.mediaName.trim() } : {}),
+    ...(input.docPath?.trim() ? { docPath: input.docPath.trim() } : {}),
+    ...(input.docName?.trim() ? { docName: input.docName.trim() } : {}),
     ...(input.scheduledAt ? { scheduledAt: input.scheduledAt } : {}),
     ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
     status: "draft",

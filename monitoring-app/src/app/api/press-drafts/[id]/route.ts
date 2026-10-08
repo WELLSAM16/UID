@@ -119,6 +119,10 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
       };
       if (body.mediaUrl !== undefined)
         patch.mediaUrl = body.mediaUrl ? String(body.mediaUrl).trim() : null;
+      for (const f of ["mediaPath", "mediaName"] as const) {
+        if (body[f] !== undefined)
+          patch[f] = body[f] ? String(body[f]).trim() : null;
+      }
       if (body.notes !== undefined)
         patch.notes = body.notes ? String(body.notes).trim() : null;
       for (const f of ["what", "who", "when", "where", "why", "how"] as const) {

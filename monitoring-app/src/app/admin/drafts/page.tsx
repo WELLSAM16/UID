@@ -12,6 +12,8 @@ interface Draft {
   accountTarget: string;
   mediaUrl?: string;
   docUrl?: string;
+  mediaName?: string | null;
+  docName?: string | null;
   scheduledAt?: string;
   notes?: string;
   status: string;
@@ -247,9 +249,11 @@ export default function AdminDraftsPage() {
                     {d.reviewNote && (
                       <div style={{ fontSize: "0.78rem", marginTop: "4px" }}>Catatan: {d.reviewNote}</div>
                     )}
-                    <div style={{ fontSize: "0.75rem", marginTop: "4px", display: "flex", gap: "8px" }}>
-                      {d.mediaUrl && <a href={d.mediaUrl} target="_blank" rel="noreferrer">🔗 media</a>}
-                      {d.docUrl && <a href={d.docUrl} target="_blank" rel="noreferrer">📄 dokumen</a>}
+                    <div style={{ fontSize: "0.75rem", marginTop: "4px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      {d.mediaUrl && <a href={d.mediaUrl} target="_blank" rel="noreferrer">🔗 media (lama)</a>}
+                      {!d.mediaUrl && d.mediaName && <span>📎 {d.mediaName}</span>}
+                      {d.docUrl && <a href={d.docUrl} target="_blank" rel="noreferrer">📄 dokumen (lama)</a>}
+                      {!d.docUrl && d.docName && <span>📎 {d.docName}</span>}
                     </div>
                   </td>
                   <td style={{ fontSize: "0.85rem" }}>{d.accountTarget}</td>

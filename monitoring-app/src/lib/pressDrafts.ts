@@ -10,6 +10,10 @@
  * catatan opsional (notes), plus panduan 5W+1H opsional (what, who, when,
  * where, why, how). Semua user boleh mengajukan; review oleh admin.
  *
+ * Catatan storage: mediaUrl LEGACY (tautan luar, hanya dibaca untuk data
+ * lama). Form baru memakai file upload Storage internal (mediaPath/mediaName,
+ * upload menyusul; untuk kini nama file dicatat).
+ *
  * File ini murni (tanpa dependensi node) agar bisa diimpor API maupun client.
  */
 
@@ -37,7 +41,11 @@ export interface PressDraftDoc {
   id?: string;
   title: string;
   body: string;
+  // LEGACY (tautan luar): hanya dibaca untuk data lama.
   mediaUrl?: string;
+  // Storage internal proyek (upload menyusul; untuk kini nama file dicatat).
+  mediaPath?: string;
+  mediaName?: string;
   notes?: string;
   // Panduan 5W+1H (semua opsional, untuk membantu penulisan isi).
   what?: string;
@@ -117,6 +125,8 @@ export function validatePressDraftFields(input: {
   title?: unknown;
   body?: unknown;
   mediaUrl?: unknown;
+  mediaPath?: unknown;
+  mediaName?: unknown;
   notes?: unknown;
   what?: unknown;
   who?: unknown;
@@ -138,6 +148,15 @@ export function validatePressDraftFields(input: {
     return { ok: false, error: "body maksimal 20000 karakter" };
   if (!isValidUrlOrEmpty(input.mediaUrl))
     return { ok: false, error: "mediaUrl harus URL http(s) yang valid" };
+  for (const [key, max] of [["mediaPath", 500], ["mediaName", 120]] as const) {
+    const v = (input as Record<string, unknown>)[key];
+    if (v !== undefined && v !== null && v !== "") {
+      if (typeof v !== "string" || !v.trim())
+        return { ok: false, error: `${key} harus berupa teks` };
+      if (v.trim().length > max)
+        return { ok: false, error: `${key} maksimal ${max} karakter` };
+    }
+  }
   if (
     input.notes !== undefined &&
     input.notes !== null &&
@@ -189,6 +208,8 @@ export function buildNewPressDraft(input: {
   title: string;
   body: string;
   mediaUrl?: string;
+  mediaPath?: string;
+  mediaName?: string;
   notes?: string;
   what?: string;
   who?: string;
@@ -205,6 +226,8 @@ export function buildNewPressDraft(input: {
     title: input.title.trim(),
     body: input.body.trim(),
     ...(input.mediaUrl?.trim() ? { mediaUrl: input.mediaUrl.trim() } : {}),
+    ...(input.mediaPath?.trim() ? { mediaPath: input.mediaPath.trim() } : {}),
+    ...(input.mediaName?.trim() ? { mediaName: input.mediaName.trim() } : {}),
     ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
     ...(input.what?.trim() ? { what: input.what.trim() } : {}),
     ...(input.who?.trim() ? { who: input.who.trim() } : {}),

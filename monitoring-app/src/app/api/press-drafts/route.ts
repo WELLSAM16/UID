@@ -109,7 +109,10 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/press-drafts
  * - Buat draft baru (status draft), atau duplikat dari expired/rejected.
- * Body: { title, body, mediaUrl?, notes?, what?, who?, when?, where?, why?, how? } atau { duplicateFrom: "<id>" }
+ * Body: { title, body, mediaPath?, mediaName?, notes?, what?, who?, when?,
+ *   where?, why?, how? } atau { duplicateFrom: "<id>" }
+ * Catatan: mediaUrl LEGACY (tautan luar) hanya dipertahankan saat duplikat
+ * data lama; form baru tidak lagi mengirimnya.
  */
 export async function POST(request: NextRequest) {
   const { response, user } = await requireUser(request);
@@ -146,6 +149,8 @@ export async function POST(request: NextRequest) {
         title: src.title,
         body: src.body,
         mediaUrl: src.mediaUrl,
+        mediaPath: src.mediaPath,
+        mediaName: src.mediaName,
         notes: src.notes,
         what: src.what,
         who: src.who,
@@ -173,6 +178,8 @@ export async function POST(request: NextRequest) {
       title: String(body.title),
       body: String(body.body),
       mediaUrl: body.mediaUrl ? String(body.mediaUrl) : undefined,
+      mediaPath: body.mediaPath ? String(body.mediaPath) : undefined,
+      mediaName: body.mediaName ? String(body.mediaName) : undefined,
       notes: body.notes ? String(body.notes) : undefined,
       what: body.what ? String(body.what) : undefined,
       who: body.who ? String(body.who) : undefined,

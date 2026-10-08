@@ -1,7 +1,12 @@
 /**
  * Upload bukti/dokumen ke Firebase Storage internal proyek
  * (bukan Drive/eksternal). Dipakai kunjungan PUMK; siap dipakai ulang
- * stakeholder/medmas dengan prefix path berbeda.
+ * stakeholder/medmas/draf medsos/draf press release dengan prefix path berbeda.
+ *
+ * Aturan file (MVP): PDF/gambar JPG-PNG-WebP, maks 10 MB — divalidasi
+ * validateStorageFile. Video SENGAJA belum didukung: butuh batas ukuran,
+ * tipe, dan biaya bandwidth sendiri; tambah STORAGE_ALLOWED_VIDEO_* terpisah
+ * saat keputusannya ada (tanpa mengubah pemanggil yang sudah ada).
  */
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "./firebase";
@@ -56,4 +61,47 @@ export async function uploadVisitEvidence(
     contentType: file.type,
   });
   return getDownloadURL(snapshot.ref);
+}
+
+/**
+ * Upload file draf medsos (content_drafts) ke Storage internal.
+ * Path: content-drafts/{uid}/{draftId}/{kind}/{timestamp}-{nama}
+ * kind "media" = foto/ilustrasi, "doc" = dokumen rencana PDF.
+ * BELUM DIPANGGIL (upload belum aktif) — disiapkan agar form tidak lagi
+ * menerima link Drive/eksternal. Return { path, url } untuk disimpan di
+ * dokumen (mediaPath/mediaUrl, docPath/docUrl).
+ */
+export async function uploadDraftFile(
+  uid: string,
+  draftId: string,
+  kind: "media" | "doc",
+  file: File
+): Promise<{ path: string; url: string }> {
+  const err = validateStorageFile(file);
+  if (err) throw new Error(err);
+  const path = `content-drafts/${uid}/${draftId}/${kind}/${Date.now()}-${sanitizeName(file.name)}`;
+  const snapshot = await uploadBytes(ref(storage, path), file, {
+    contentType: file.type,
+  });
+  return { path, url: await getDownloadURL(snapshot.ref) };
+}
+
+/**
+ * Upload file draf press release ke Storage internal.
+ * Path: press-release-drafts/{uid}/{draftId}/media/{timestamp}-{nama}
+ * BELUM DIPANGGIL (upload belum aktif) — disiapkan agar form tidak lagi
+ * menerima link Drive/eksternal.
+ */
+export async function uploadPressDraftFile(
+  uid: string,
+  draftId: string,
+  file: File
+): Promise<{ path: string; url: string }> {
+  const err = validateStorageFile(file);
+  if (err) throw new Error(err);
+  const path = `press-release-drafts/${uid}/${draftId}/media/${Date.now()}-${sanitizeName(file.name)}`;
+  const snapshot = await uploadBytes(ref(storage, path), file, {
+    contentType: file.type,
+  });
+  return { path, url: await getDownloadURL(snapshot.ref) };
 }

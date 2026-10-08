@@ -10,6 +10,7 @@ interface PressDraft {
   title: string;
   body: string;
   mediaUrl?: string;
+  mediaName?: string | null;
   notes?: string;
   what?: string;
   who?: string;
@@ -251,7 +252,12 @@ export default function AdminPressDraftsPage() {
                     )}
                     {d.mediaUrl && (
                       <div style={{ fontSize: "0.75rem", marginTop: "4px" }}>
-                        <a href={d.mediaUrl} target="_blank" rel="noreferrer">🔗 media</a>
+                        <a href={d.mediaUrl} target="_blank" rel="noreferrer">🔗 media (lama)</a>
+                      </div>
+                    )}
+                    {!d.mediaUrl && d.mediaName && (
+                      <div style={{ fontSize: "0.75rem", marginTop: "4px" }}>
+                        📎 {d.mediaName}
                       </div>
                     )}
                   </td>

@@ -113,8 +113,11 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/drafts
  * - Buat draft baru (status draft), atau duplikat dari expired/rejected.
- * Body: { title, caption, accountTarget, mediaUrl?, docUrl?, scheduledAt?, notes? }
+ * Body: { title, caption, accountTarget, mediaPath?, mediaName?, docPath?,
+ *   docName?, scheduledAt?, notes? }
  *   atau { duplicateFrom: "<id>" }
+ * Catatan: mediaUrl/docUrl LEGACY (tautan luar) hanya dipertahankan saat
+ * duplikat data lama; form baru tidak lagi mengirimnya.
  */
 export async function POST(request: NextRequest) {
   const { response, user } = await requireUser(request);
@@ -154,6 +157,10 @@ export async function POST(request: NextRequest) {
         accountTarget: src.accountTarget,
         mediaUrl: src.mediaUrl,
         docUrl: src.docUrl,
+        mediaPath: src.mediaPath,
+        mediaName: src.mediaName,
+        docPath: src.docPath,
+        docName: src.docName,
         scheduledAt: src.scheduledAt,
         notes: src.notes,
         authorUid: u.uid,
@@ -179,6 +186,10 @@ export async function POST(request: NextRequest) {
       accountTarget: String(body.accountTarget),
       mediaUrl: body.mediaUrl ? String(body.mediaUrl) : undefined,
       docUrl: body.docUrl ? String(body.docUrl) : undefined,
+      mediaPath: body.mediaPath ? String(body.mediaPath) : undefined,
+      mediaName: body.mediaName ? String(body.mediaName) : undefined,
+      docPath: body.docPath ? String(body.docPath) : undefined,
+      docName: body.docName ? String(body.docName) : undefined,
       scheduledAt: body.scheduledAt ? String(body.scheduledAt) : undefined,
       notes: body.notes ? String(body.notes) : undefined,
       authorUid: u.uid,

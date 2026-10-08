@@ -9,6 +9,10 @@ export interface DraftDetail {
   accountTarget: string;
   mediaUrl?: string | null;
   docUrl?: string | null;
+  mediaPath?: string | null;
+  mediaName?: string | null;
+  docPath?: string | null;
+  docName?: string | null;
   scheduledAt?: string | null;
   notes?: string | null;
   status: string;
@@ -131,14 +135,18 @@ export default function DraftDetailModal({ draft, onClose }: { draft: DraftDetai
           {draft.notes ? <Row label="Catatan">{draft.notes}</Row> : null}
           <Row label="Media">
             {draft.mediaUrl ? (
-              <a href={draft.mediaUrl} target="_blank" rel="noreferrer" style={{ overflowWrap: "anywhere" }}>🔗 {draft.mediaUrl}</a>
+              <a href={draft.mediaUrl} target="_blank" rel="noreferrer" style={{ overflowWrap: "anywhere" }}>🔗 {draft.mediaUrl} (tautan luar lama)</a>
+            ) : draft.mediaName ? (
+              <>📎 {draft.mediaName} <span style={{ color: "var(--text-muted)" }}>(Storage internal — upload menyusul)</span></>
             ) : (
               "-"
             )}
           </Row>
           <Row label="Dokumen">
             {draft.docUrl ? (
-              <a href={draft.docUrl} target="_blank" rel="noreferrer" style={{ overflowWrap: "anywhere" }}>📄 {draft.docUrl}</a>
+              <a href={draft.docUrl} target="_blank" rel="noreferrer" style={{ overflowWrap: "anywhere" }}>📄 {draft.docUrl} (tautan luar lama)</a>
+            ) : draft.docName ? (
+              <>📎 {draft.docName} <span style={{ color: "var(--text-muted)" }}>(Storage internal — upload menyusul)</span></>
             ) : (
               "-"
             )}

@@ -7,6 +7,8 @@ export interface PressDraftDetail {
   title: string;
   body: string;
   mediaUrl?: string | null;
+  mediaPath?: string | null;
+  mediaName?: string | null;
   notes?: string | null;
   what?: string | null;
   who?: string | null;
@@ -150,7 +152,9 @@ export default function PressDraftDetailModal({ draft, onClose }: { draft: Press
           {draft.notes ? <Row label="Catatan">{draft.notes}</Row> : null}
           <Row label="Media">
             {draft.mediaUrl ? (
-              <a href={draft.mediaUrl} target="_blank" rel="noreferrer" style={{ overflowWrap: "anywhere" }}>🔗 {draft.mediaUrl}</a>
+              <a href={draft.mediaUrl} target="_blank" rel="noreferrer" style={{ overflowWrap: "anywhere" }}>🔗 {draft.mediaUrl} (tautan luar lama)</a>
+            ) : draft.mediaName ? (
+              <>📎 {draft.mediaName} <span style={{ color: "var(--text-muted)" }}>(Storage internal — upload menyusul)</span></>
             ) : (
               "-"
             )}

@@ -124,6 +124,10 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
         patch.mediaUrl = body.mediaUrl ? String(body.mediaUrl).trim() : null;
       if (body.docUrl !== undefined)
         patch.docUrl = body.docUrl ? String(body.docUrl).trim() : null;
+      for (const f of ["mediaPath", "mediaName", "docPath", "docName"] as const) {
+        if (body[f] !== undefined)
+          patch[f] = body[f] ? String(body[f]).trim() : null;
+      }
       if (body.scheduledAt !== undefined)
         patch.scheduledAt = body.scheduledAt ? String(body.scheduledAt) : null;
       if (body.notes !== undefined)
