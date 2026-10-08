@@ -4,14 +4,21 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useRouter } from "next/navigation";
 import DraftDetailModal from "@/components/DraftDetailModal";
+import { validateStorageFile } from "@/lib/storage";
 
 interface Draft {
   id: string;
   title: string;
   caption: string;
   accountTarget: string;
+  // LEGACY tautan luar (data lama, tetap ditampilkan read-only).
   mediaUrl?: string;
   docUrl?: string;
+  // File internal Storage proyek (upload menyusul; kini nama dicatat).
+  mediaPath?: string | null;
+  mediaName?: string | null;
+  docPath?: string | null;
+  docName?: string | null;
   scheduledAt?: string;
   notes?: string;
   status: string;
@@ -24,7 +31,7 @@ interface Draft {
   _isExpired: boolean;
 }
 
-const EMPTY = { title: "", caption: "", accountTarget: "", mediaUrl: "", docUrl: "", scheduledAt: "", notes: "" };
+const EMPTY = { title: "", caption: "", accountTarget: "", scheduledAt: "", notes: "" };
 
 function badge(status: string) {
   const map: Record<string, { bg: string; fg: string }> = {
@@ -53,6 +60,12 @@ export default function UserDraftsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [form, setForm] = useState(EMPTY);
+  // File internal (belum diupload — hanya dicatat namanya, ikut pola
+  // stakeholder realisasi + EVP/PUMK: validateStorageFile tampilan saja).
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [removeMedia, setRemoveMedia] = useState(false);
+  const [removeDoc, setRemoveDoc] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Draft | null>(null);
 
@@ -113,6 +126,10 @@ export default function UserDraftsPage() {
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY);
+    setMediaFile(null);
+    setDocFile(null);
+    setRemoveMedia(false);
+    setRemoveDoc(false);
     setModalOpen(true);
   };
 
@@ -122,13 +139,18 @@ export default function UserDraftsPage() {
       title: d.title,
       caption: d.caption,
       accountTarget: d.accountTarget,
-      mediaUrl: d.mediaUrl || "",
-      docUrl: d.docUrl || "",
       scheduledAt: d.scheduledAt ? d.scheduledAt.slice(0, 16) : "",
       notes: d.notes || "",
     });
+    setMediaFile(null);
+    setDocFile(null);
+    setRemoveMedia(false);
+    setRemoveDoc(false);
     setModalOpen(true);
   };
+
+  const fileHint = (f: File | null) =>
+    f ? `${f.name} (${(f.size / 1024).toFixed(0)} KB) — akan tersimpan di Storage internal (upload menyusul)` : undefined;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,17 +158,49 @@ export default function UserDraftsPage() {
       alert("Judul, caption, dan target akun wajib diisi");
       return;
     }
+    if (mediaFile) {
+      const ferr = validateStorageFile(mediaFile);
+      if (ferr) {
+        alert(`File media: ${ferr}`);
+        return;
+      }
+    }
+    if (docFile) {
+      const ferr = validateStorageFile(docFile);
+      if (ferr) {
+        alert(`File dokumen: ${ferr}`);
+        return;
+      }
+    }
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
         title: form.title.trim(),
         caption: form.caption.trim(),
         accountTarget: form.accountTarget.trim(),
-        mediaUrl: form.mediaUrl.trim() || undefined,
-        docUrl: form.docUrl.trim() || undefined,
         scheduledAt: form.scheduledAt ? new Date(form.scheduledAt).toISOString() : undefined,
         notes: form.notes.trim() || undefined,
       };
+      // File baru: catat nama (upload Storage aktif belakangan via
+      // uploadDraftFile). Legacy link luar ikut dibersihkan saat diganti file.
+      if (mediaFile) {
+        payload.mediaName = mediaFile.name;
+        payload.mediaPath = null;
+        payload.mediaUrl = null;
+      } else if (removeMedia) {
+        payload.mediaName = null;
+        payload.mediaPath = null;
+        payload.mediaUrl = null;
+      }
+      if (docFile) {
+        payload.docName = docFile.name;
+        payload.docPath = null;
+        payload.docUrl = null;
+      } else if (removeDoc) {
+        payload.docName = null;
+        payload.docPath = null;
+        payload.docUrl = null;
+      }
       let res: Response;
       if (editing) {
         res = await authFetch(`/api/drafts/${editing.id}`, {
@@ -291,9 +345,11 @@ export default function UserDraftsPage() {
                     {d.status === "rejected" && d.reviewNote && (
                       <div style={{ fontSize: "0.78rem", color: "var(--danger)", marginTop: "4px" }}>Catatan admin: {d.reviewNote}</div>
                     )}
-                    <div style={{ fontSize: "0.75rem", marginTop: "4px", display: "flex", gap: "8px" }}>
-                      {d.mediaUrl && <a href={d.mediaUrl} target="_blank" rel="noreferrer">🔗 media</a>}
-                      {d.docUrl && <a href={d.docUrl} target="_blank" rel="noreferrer">📄 dokumen</a>}
+                    <div style={{ fontSize: "0.75rem", marginTop: "4px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      {d.mediaUrl && <a href={d.mediaUrl} target="_blank" rel="noreferrer" title="Tautan luar lama">🔗 media (lama)</a>}
+                      {!d.mediaUrl && d.mediaName && <span title="File internal — upload menyusul">📎 {d.mediaName}</span>}
+                      {d.docUrl && <a href={d.docUrl} target="_blank" rel="noreferrer" title="Tautan luar lama">📄 dokumen (lama)</a>}
+                      {!d.docUrl && d.docName && <span title="File internal — upload menyusul">📎 {d.docName}</span>}
                     </div>
                   </td>
                   <td style={{ fontSize: "0.85rem" }}>{d.accountTarget}</td>
@@ -332,7 +388,9 @@ export default function UserDraftsPage() {
           <div className="glass-panel" style={{ padding: "28px", width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto" }}>
             <h2 style={{ marginBottom: "16px" }}>{editing ? "Edit Draf" : "Buat Draf Baru"}</h2>
             <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "16px" }}>
-              Simpan teks + link saja. Upload foto/video/PDF ke Google Drive lalu paste link-nya — tidak membebani database.
+              File media & dokumen tersimpan di Storage internal proyek (bukan Drive).
+              Pilih file PDF/gambar maks 10 MB — upload aktif belakangan, untuk kini nama file dicatat.
+              Video belum didukung. Data lama bertautan luar tetap bisa dibuka (label “lama”).
             </p>
             <form onSubmit={handleSave}>
               <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Judul*
@@ -344,11 +402,55 @@ export default function UserDraftsPage() {
               <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Target akun*
                 <input className="input-field" value={form.accountTarget} onChange={(e) => setForm({ ...form, accountTarget: e.target.value })} placeholder="mis. welldrone" style={{ marginTop: "6px" }} />
               </label>
-              <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Link media (Drive/preview, opsional)
-                <input className="input-field" value={form.mediaUrl} onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })} placeholder="https://…" style={{ marginTop: "6px" }} />
+              <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Media — foto/ilustrasi (PDF/gambar, maks 10 MB, opsional)
+                {(editing?.mediaUrl || editing?.mediaName) && !mediaFile && !removeMedia && (
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "6px" }}>
+                    Saat ini: {editing?.mediaName || editing?.mediaUrl}
+                    {editing?.mediaUrl && !editing?.mediaName && " (tautan luar lama)"}{" "}
+                    <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => setRemoveMedia(true)}>Hapus</button>
+                  </div>
+                )}
+                {removeMedia && !mediaFile && (
+                  <div style={{ fontSize: "0.78rem", color: "var(--danger)", marginTop: "6px" }}>
+                    File akan dihapus saat disimpan.{" "}
+                    <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => setRemoveMedia(false)}>Batalkan</button>
+                  </div>
+                )}
+                {!removeMedia && (
+                  <input
+                    type="file"
+                    className="input-field"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
+                    style={{ marginTop: "6px" }}
+                  />
+                )}
+                {fileHint(mediaFile) && <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "4px" }}>{fileHint(mediaFile)}</div>}
               </label>
-              <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Link dokumen rencana PDF (opsional)
-                <input className="input-field" value={form.docUrl} onChange={(e) => setForm({ ...form, docUrl: e.target.value })} placeholder="https://…" style={{ marginTop: "6px" }} />
+              <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Dokumen rencana PDF (PDF/gambar, maks 10 MB, opsional)
+                {(editing?.docUrl || editing?.docName) && !docFile && !removeDoc && (
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "6px" }}>
+                    Saat ini: {editing?.docName || editing?.docUrl}
+                    {editing?.docUrl && !editing?.docName && " (tautan luar lama)"}{" "}
+                    <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => setRemoveDoc(true)}>Hapus</button>
+                  </div>
+                )}
+                {removeDoc && !docFile && (
+                  <div style={{ fontSize: "0.78rem", color: "var(--danger)", marginTop: "6px" }}>
+                    File akan dihapus saat disimpan.{" "}
+                    <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => setRemoveDoc(false)}>Batalkan</button>
+                  </div>
+                )}
+                {!removeDoc && (
+                  <input
+                    type="file"
+                    className="input-field"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    onChange={(e) => setDocFile(e.target.files?.[0] || null)}
+                    style={{ marginTop: "6px" }}
+                  />
+                )}
+                {fileHint(docFile) && <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "4px" }}>{fileHint(docFile)}</div>}
               </label>
               <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Jadwal rencana publish (opsional)
                 <input type="datetime-local" className="input-field" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} style={{ marginTop: "6px" }} />

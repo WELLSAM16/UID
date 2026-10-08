@@ -4,12 +4,17 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useRouter } from "next/navigation";
 import PressDraftDetailModal from "@/components/PressDraftDetailModal";
+import { validateStorageFile } from "@/lib/storage";
 
 interface PressDraft {
   id: string;
   title: string;
   body: string;
+  // LEGACY tautan luar (data lama, tetap ditampilkan read-only).
   mediaUrl?: string;
+  // File internal Storage proyek (upload menyusul; kini nama dicatat).
+  mediaPath?: string | null;
+  mediaName?: string | null;
   notes?: string;
   what?: string;
   who?: string;
@@ -27,7 +32,7 @@ interface PressDraft {
   _isExpired: boolean;
 }
 
-const EMPTY = { title: "", body: "", mediaUrl: "", notes: "", what: "", who: "", when: "", where: "", why: "", how: "" };
+const EMPTY = { title: "", body: "", notes: "", what: "", who: "", when: "", where: "", why: "", how: "" };
 
 const W5H1_FIELDS = [
   { key: "what", label: "What — Apa peristiwanya?", placeholder: "Contoh: PLN meresmikan 10 SPKLU baru…" },
@@ -65,6 +70,9 @@ export default function PressDraftsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PressDraft | null>(null);
   const [form, setForm] = useState(EMPTY);
+  // File internal (belum diupload — hanya dicatat namanya).
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [removeMedia, setRemoveMedia] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<PressDraft | null>(null);
 
@@ -125,6 +133,8 @@ export default function PressDraftsPage() {
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY);
+    setMediaFile(null);
+    setRemoveMedia(false);
     setModalOpen(true);
   };
 
@@ -133,7 +143,6 @@ export default function PressDraftsPage() {
     setForm({
       title: d.title,
       body: d.body,
-      mediaUrl: d.mediaUrl || "",
       notes: d.notes || "",
       what: d.what || "",
       who: d.who || "",
@@ -142,6 +151,8 @@ export default function PressDraftsPage() {
       why: d.why || "",
       how: d.how || "",
     });
+    setMediaFile(null);
+    setRemoveMedia(false);
     setModalOpen(true);
   };
 
@@ -151,12 +162,18 @@ export default function PressDraftsPage() {
       alert("Judul dan isi press release wajib diisi");
       return;
     }
+    if (mediaFile) {
+      const ferr = validateStorageFile(mediaFile);
+      if (ferr) {
+        alert(`File media: ${ferr}`);
+        return;
+      }
+    }
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
         title: form.title.trim(),
         body: form.body.trim(),
-        mediaUrl: form.mediaUrl.trim() || undefined,
         notes: form.notes.trim() || undefined,
         what: form.what.trim() || undefined,
         who: form.who.trim() || undefined,
@@ -165,6 +182,16 @@ export default function PressDraftsPage() {
         why: form.why.trim() || undefined,
         how: form.how.trim() || undefined,
       };
+      // File baru: catat nama (upload via uploadPressDraftFile menyusul).
+      if (mediaFile) {
+        payload.mediaName = mediaFile.name;
+        payload.mediaPath = null;
+        payload.mediaUrl = null;
+      } else if (removeMedia) {
+        payload.mediaName = null;
+        payload.mediaPath = null;
+        payload.mediaUrl = null;
+      }
       let res: Response;
       if (editing) {
         res = await authFetch(`/api/press-drafts/${editing.id}`, {
@@ -310,7 +337,12 @@ export default function PressDraftsPage() {
                     )}
                     {d.mediaUrl && (
                       <div style={{ fontSize: "0.75rem", marginTop: "4px" }}>
-                        <a href={d.mediaUrl} target="_blank" rel="noreferrer">🔗 media</a>
+                        <a href={d.mediaUrl} target="_blank" rel="noreferrer" title="Tautan luar lama">🔗 media (lama)</a>
+                      </div>
+                    )}
+                    {!d.mediaUrl && d.mediaName && (
+                      <div style={{ fontSize: "0.75rem", marginTop: "4px" }} title="File internal — upload menyusul">
+                        📎 {d.mediaName}
                       </div>
                     )}
                   </td>
@@ -349,7 +381,8 @@ export default function PressDraftsPage() {
           <div className="glass-panel" style={{ padding: "28px", width: "100%", maxWidth: "640px", maxHeight: "90vh", overflowY: "auto" }}>
             <h2 style={{ marginBottom: "16px" }}>{editing ? "Edit Draf" : "Buat Draf Press Release"}</h2>
             <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "16px" }}>
-              Tulis judul + isi siaran pers. Upload gambar/video ke Google Drive lalu paste link-nya di kolom media.
+              Tulis judul + isi siaran pers. File media tersimpan di Storage internal proyek (bukan Drive) —
+              pilih file PDF/gambar maks 10 MB, upload aktif belakangan (untuk kini nama file dicatat). Video belum didukung.
             </p>
             <form onSubmit={handleSave}>
               <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Judul*
@@ -379,8 +412,34 @@ export default function PressDraftsPage() {
                   </label>
                 ))}
               </details>
-              <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Link media gambar/video (opsional)
-                <input className="input-field" value={form.mediaUrl} onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })} placeholder="https://…" style={{ marginTop: "6px" }} />
+              <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Media gambar (PDF/gambar, maks 10 MB, opsional)
+                {(editing?.mediaUrl || editing?.mediaName) && !mediaFile && !removeMedia && (
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "6px" }}>
+                    Saat ini: {editing?.mediaName || editing?.mediaUrl}
+                    {editing?.mediaUrl && !editing?.mediaName && " (tautan luar lama)"}{" "}
+                    <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => setRemoveMedia(true)}>Hapus</button>
+                  </div>
+                )}
+                {removeMedia && !mediaFile && (
+                  <div style={{ fontSize: "0.78rem", color: "var(--danger)", marginTop: "6px" }}>
+                    File akan dihapus saat disimpan.{" "}
+                    <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => setRemoveMedia(false)}>Batalkan</button>
+                  </div>
+                )}
+                {!removeMedia && (
+                  <input
+                    type="file"
+                    className="input-field"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
+                    style={{ marginTop: "6px" }}
+                  />
+                )}
+                {mediaFile && (
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                    {mediaFile.name} ({(mediaFile.size / 1024).toFixed(0)} KB) — akan tersimpan di Storage internal (upload menyusul)
+                  </div>
+                )}
               </label>
               <label style={{ display: "block", marginBottom: "20px", fontSize: "0.9rem" }}>Catatan (opsional)
                 <input className="input-field" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} style={{ marginTop: "6px" }} />
