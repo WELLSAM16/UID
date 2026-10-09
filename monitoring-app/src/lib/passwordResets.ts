@@ -1,7 +1,7 @@
 /**
  * Permintaan reset password (Lupa Sandi) — pola sama seperti account_requests.
  *
- * Alur: form publik (/lupa-sandi, NIP + nama) → `password_resets` (pending)
+ * Alur: form publik (/lupa-sandi, NIP + nama + email wajib) → `password_resets` (pending)
  * → notif di /admin/users (super admin) → Reset: password acak baru,
  * mustChangePassword=true → info akun (profil + NIP + password default)
  * dikirim ke email kontak (SMTP) atau ditampilkan ke admin untuk
