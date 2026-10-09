@@ -50,7 +50,6 @@ const MENUS: MainMenu[] = [
       { name: "Monitoring Press Release", href: "/press-release/monitoring", icon: "📡", desc: "Pantau rilis dari spreadsheet" },
       { name: "Draf Press Release", href: "/press-release/drafts", icon: "📝", desc: "Ajukan siaran pers baru" },
       { name: "Review Press Release", href: "/admin/press-drafts", icon: "✅", desc: "Validasi ajuan user", adminOnly: true },
-      { name: "Kelola Sumber", href: "/admin/press-sources", icon: "🔗", desc: "Atur spreadsheet per tahun", adminOnly: true },
     ],
   },
   {
