@@ -62,10 +62,13 @@ service cloud.firestore {
       allow create: if false;
       allow update, delete: if false;
     }
-    // Stakeholder KPI 5 & 6 (kerangka — API + tulis menyusul).
-    // Baca: semua user login. Tulis langsung: ditolak (wajib via Admin SDK).
+    // Stakeholder KPI 5 & 6 — database per unit (pengganti tab SPS per UP3).
+    // Tulis via Admin SDK (/api/stakeholders); client langsung ditolak.
+    // Baca: admin lintas unit, atau se-unit/penulis (unit lain tidak terlihat).
     match /stakeholders/{docId} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null
+        && (isAdminRole() || resource.data.authorUid == request.auth.uid
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.unitId == resource.data.unitId);
       allow write: if false;
     }
     match /stakeholder_activities/{docId} {
