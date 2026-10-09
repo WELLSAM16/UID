@@ -2,9 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import * as XLSX from "xlsx";
-import Link from "next/link";
 import { useAuth } from "@/lib/authContext";
-import { isAdminRole } from "@/lib/roles";
 import { useRouter } from "next/navigation";
 import { monthLabel } from "@/lib/pressRelease";
 
@@ -217,9 +215,6 @@ export default function PressReleaseMonitoringPage() {
           <h1 style={{ fontSize: "2.2rem", margin: 0, color: "#111" }}>Monitoring Press Release</h1>
           <p style={{ margin: "5px 0 0 0", color: "#111" }}>
             Diperbarui {fetchedAt}
-            {isAdminRole(user?.role) && (
-              <> • <Link href="/admin/press-sources" style={{ textDecoration: "underline" }}>Kelola sumber</Link></>
-            )}
           </p>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "flex-end", flexWrap: "wrap" }}>
