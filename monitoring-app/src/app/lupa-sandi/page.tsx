@@ -13,8 +13,8 @@ export default function LupaSandiPage() {
 
   const submit = async () => {
     setError(null);
-    if (!nip.trim() || !name.trim()) {
-      setError("NIP dan nama lengkap wajib diisi (nama harus sama dengan data akun).");
+    if (!nip.trim() || !name.trim() || !email.trim()) {
+      setError("NIP, nama lengkap, dan email kontak wajib diisi.");
       return;
     }
     try {
@@ -22,7 +22,7 @@ export default function LupaSandiPage() {
       const res = await fetch("/api/password-resets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nip, name, email: email.trim() || undefined }),
+        body: JSON.stringify({ nip, name, email: email.trim() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `Gagal mengirim (${res.status})`);
@@ -72,7 +72,7 @@ export default function LupaSandiPage() {
             </div>
             <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>
-                Email kontak <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>(opsional, untuk terima info akun)</span>
+                Email kontak <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>(wajib, password default hanya dikirim ke sini)</span>
               </label>
               <input className="input-field" type="email" placeholder="nama@pln.co.id" value={email}
                 onChange={(e) => setEmail(e.target.value.trim())} />

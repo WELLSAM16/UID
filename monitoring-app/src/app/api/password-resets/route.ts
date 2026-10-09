@@ -61,12 +61,14 @@ export async function POST(request: Request) {
   if (!name || name.length < 2) {
     return NextResponse.json({ error: "Nama lengkap wajib diisi" }, { status: 400 });
   }
-  let email: string | null = null;
-  if (emailRaw) {
-    const emailErr = validateRequestEmail(emailRaw);
-    if (emailErr) return NextResponse.json({ error: emailErr }, { status: 400 });
-    email = emailRaw;
+  // Email wajib: password default hanya dikirim ke email ini agar
+  // hanya diketahui user (reset manual darurat tetap ada di Kelola Pengguna).
+  if (!emailRaw) {
+    return NextResponse.json({ error: "Email kontak wajib diisi" }, { status: 400 });
   }
+  const emailErr = validateRequestEmail(emailRaw);
+  if (emailErr) return NextResponse.json({ error: emailErr }, { status: 400 });
+  const email: string = emailRaw;
 
   const db = getAdminDb();
   const found = await db.collection("users").where("nip", "==", nip).limit(1).get();
