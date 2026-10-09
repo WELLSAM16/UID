@@ -129,12 +129,159 @@ export function achievementPercent(realisasi: number, target: number, kpi?: KpiN
 export interface Stakeholder {
   id: string;
   unitId: string;
-  nama: string;
-  jabatan?: string | null;
-  quadrant: StakeholderQuadrant;
+  /** Kolom 1 SPS: Instansi/lembaga/perusahaan. */
+  instansi: string;
+  /** Kolom 2: Alamat kantor. */
+  alamat: string;
+  /** Kolom 3: Nama pimpinan. */
+  namaPimpinan: string;
+  /** Kolom 4: Nomor telepon kantor. */
+  telpKantor: string;
+  /** Kolom 5 (-): Nomor HP pimpinan — opsional. */
   noHpPimpinan?: string | null;
+  /** Kolom 6 (-): Tanggal ulang tahun pimpinan — opsional. */
   tglUltahPimpinan?: string | null;
+  /** Kolom 7: Nama PIC. */
+  namaPic: string;
+  /** Kolom 8 (-): Nomor HP PIC — opsional. */
   noHpPic?: string | null;
+  /** Kolom 9: Hari ulang tahun lembaga/instansi/perusahaan. */
+  hutLembaga: string;
+  /** Kolom 10: Isu. */
+  isu: string;
+  /** Kolom 11: Sikap stakeholder (cth: PEMERINTAH, KEPOLISIAN, KEJARI). */
+  sikap: string;
+  /** Kolom 12: Maping kuadran Mendelow. */
+  quadrant: StakeholderQuadrant;
+  /** Kolom 13: Tujuan pengelolaan. */
+  tujuan: string;
+  /** Kolom 14: Metode pengelolaan. */
+  metode: string;
+  /** Kolom 15: Pelaksana. */
+  pelaksana: string;
+  /** Kolom 16: Waktu. */
+  waktu: string;
+  /** Kolom 17: Tarif/daya listrik (semua IDPEL). */
+  tarifDaya: string;
+  /** Kolom 18 (-): Pemeliharaan — opsional. */
+  pemeliharaan?: string | null;
+  /** Kolom 19: MOU/PKS. */
+  mouPks: string;
+  /** Kolom 20: Kerjasama dengan anak perusahaan. */
+  kerjasamaAnak: string;
+  // Kompat lama (pra-SPS): nama = instansi, jabatan = namaPimpinan.
+  nama?: string | null;
+  jabatan?: string | null;
+  authorUid?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Nilai placeholder sheet yang dihitung KOSONG untuk % kelengkapan. */
+export const STAKEHOLDER_PLACEHOLDERS = [
+  "on proggress",
+  "on progress",
+  "belum ada",
+  "tidak ada",
+  "tersimpan sesuai peruntukan",
+] as const;
+
+/** Kolom opsional (-) sesuai catatan Rekap: boleh kosong tanpa penalti. */
+export const STAKEHOLDER_OPTIONAL_COLS = [
+  "noHpPimpinan",
+  "tglUltahPimpinan",
+  "noHpPic",
+  "pemeliharaan",
+] as const;
+
+/** Kolom wajib (16 dari 20). */
+export const STAKEHOLDER_REQUIRED_COLS = [
+  "instansi",
+  "alamat",
+  "namaPimpinan",
+  "telpKantor",
+  "namaPic",
+  "hutLembaga",
+  "isu",
+  "sikap",
+  "quadrant",
+  "tujuan",
+  "metode",
+  "pelaksana",
+  "waktu",
+  "tarifDaya",
+  "mouPks",
+  "kerjasamaAnak",
+] as const;
+
+/** Opsi sikap stakeholder (dari data SPS; tetap boleh teks bebas). */
+export const STAKEHOLDER_SIKAP_OPTIONS = [
+  "PEMERINTAH",
+  "KEPOLISIAN",
+  "KEJARI",
+  "Pelanggan VVIP",
+  "MEDIA",
+  "KOMUNITAS",
+  "AKADEMISI",
+  "BUMN/BUMD",
+] as const;
+
+function isPlaceholder(v: unknown): boolean {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (!s) return true;
+  return (STAKEHOLDER_PLACEHOLDERS as readonly string[]).includes(s);
+}
+
+/** % kelengkapan satu record (0–100): sel terisi non-placeholder / 20 kolom. */
+export function stakeholderCompleteness(s: Record<string, unknown>): number {
+  const cols = [...STAKEHOLDER_REQUIRED_COLS, ...STAKEHOLDER_OPTIONAL_COLS];
+  const filled = cols.filter((c) => !isPlaceholder(s[c])).length;
+  return Math.round((filled / cols.length) * 100);
+}
+
+export interface StakeholderValidation {
+  ok: boolean;
+  error?: string;
+}
+
+function hasMinDigits(v: string, min: number): boolean {
+  return v.replace(/\D/g, "").length >= min;
+}
+
+/** Validasi body create/update database stakeholder (cerminan 20 kolom SPS). */
+export function validateStakeholder(input: Record<string, unknown>): StakeholderValidation {
+  const s = (k: string) => String(input[k] ?? "").trim();
+  const labels: Record<string, string> = {
+    instansi: "Instansi/lembaga/perusahaan",
+    alamat: "Alamat kantor",
+    namaPimpinan: "Nama pimpinan",
+    telpKantor: "Nomor telepon kantor",
+    namaPic: "Nama PIC",
+    hutLembaga: "Hari ulang tahun lembaga",
+    isu: "Isu",
+    sikap: "Sikap stakeholder",
+    tujuan: "Tujuan pengelolaan",
+    metode: "Metode pengelolaan",
+    pelaksana: "Pelaksana",
+    waktu: "Waktu",
+    tarifDaya: "Tarif/daya listrik",
+    mouPks: "MOU/PKS",
+    kerjasamaAnak: "Kerjasama anak perusahaan",
+  };
+  for (const k of STAKEHOLDER_REQUIRED_COLS) {
+    if (k === "quadrant") continue;
+    if (!s(k)) return { ok: false, error: `${labels[k] || k} wajib diisi` };
+  }
+  if (!(STAKEHOLDER_QUADRANTS as readonly string[]).includes(s("quadrant")))
+    return { ok: false, error: `Maping kuadran harus salah satu: ${STAKEHOLDER_QUADRANTS.join(", ")}` };
+  // Kolom HP opsional: bila diisi, minimal terkandung 9 digit (format SPS
+  // multi-nomor + nama, cth "0812... (Dedi); 0813... (Danny)" tetap lolos).
+  for (const k of ["noHpPimpinan", "noHpPic"] as const) {
+    const v = s(k);
+    if (v && !hasMinDigits(v, 9))
+      return { ok: false, error: `${k === "noHpPimpinan" ? "No HP pimpinan" : "No HP PIC"} harus memuat minimal 9 digit angka` };
+  }
+  return { ok: true };
 }
 
 /* ------------------------------------------------------------------ */

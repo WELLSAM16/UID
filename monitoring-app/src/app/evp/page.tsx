@@ -10,7 +10,7 @@ import {
   getVillageMap,
   type Wilayah,
 } from "@/lib/wilayah";
-import { UNIT_OPTIONS, formatUnitDisplay } from "@/lib/roles";
+import { UNIT_OPTIONS } from "@/lib/roles";
 
 interface Report {
   id: string;
@@ -38,6 +38,44 @@ function currentMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  marginBottom: "6px",
+  fontSize: "0.85rem",
+  fontWeight: 500,
+  color: "#0284c7",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const hintStyle: React.CSSProperties = {
+  fontSize: "0.75rem",
+  color: "var(--text-muted)",
+  marginTop: "4px",
+};
+
+/** Satu field dalam grid 12 kolom (top-level agar input tidak kehilangan fokus saat mengetik). */
+function Field({
+  label,
+  hint,
+  span,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  span: 3 | 4 | 6 | 8 | 12;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`kspan-${span}`}>
+      <label style={labelStyle} title={label}>{label}</label>
+      {children}
+      {hint && <div style={hintStyle}>{hint}</div>}
+    </div>
+  );
+}
+
 export default function EvpPage() {
   const { user, getToken } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
@@ -48,11 +86,11 @@ export default function EvpPage() {
   const [bulan, setBulan] = useState(currentMonth());
   const [fUnit, setFUnit] = useState("");
 
-  // Form (cerminan form volunteer TJSL; identitas diprefill dari profil)
+  // Form — semua kosong, user mengisi sendiri (tanpa prefill).
   const [namaPegawai, setNamaPegawai] = useState("");
   const [nip, setNip] = useState("");
   const [noHp, setNoHp] = useState("");
-  const [unitAsal, setUnitAsal] = useState("UID JAKARTA RAYA");
+  const [unitAsal, setUnitAsal] = useState("");
   const [upDetail, setUpDetail] = useState("");
   const [kategori, setKategori] = useState("");
   const [namaProgram, setNamaProgram] = useState("");
@@ -87,14 +125,6 @@ export default function EvpPage() {
   const isSuperAdmin = user?.role === "administrator" || (user?.role as string) === "admin";
   const isUnitRole = user?.role === "staff" || user?.role === "team_leader" || user?.role === "asman";
   const canInput = isUnitRole || isSuperAdmin;
-
-  // Prefill identitas dari profil login.
-  useEffect(() => {
-    if (!user) return;
-    if (user.name) setNamaPegawai((v) => v || user.name || "");
-    if (user.nip) setNip((v) => v || user.nip || "");
-    if (user.unitId) setUpDetail((v) => v || formatUnitDisplay(user.unitId));
-  }, [user]);
 
   // Muat daftar provinsi sekali saat halaman dibuka (ada bawaan statis).
   useEffect(() => {
@@ -201,7 +231,8 @@ export default function EvpPage() {
   }
 
   const resetForm = () => {
-    setNoHp(""); setNamaProgram("");
+    setNamaPegawai(""); setNip(""); setNoHp(""); setUnitAsal(""); setUpDetail("");
+    setNamaProgram("");
     setProvinsi(""); setKota(""); setKecamatan(""); setKelurahan("");
     setProvId(""); setKotaId(""); setKecId(""); setKelId("");
     setKotaList([]); setKecList([]); setKelList([]);
@@ -212,6 +243,18 @@ export default function EvpPage() {
   const handleCreate = async () => {
     if (!namaPegawai.trim() || !nip.trim() || !noHp.trim() || !namaProgram.trim() || !deskripsi.trim()) {
       setError("Nama pegawai, NIP, No HP, nama program, dan deskripsi wajib diisi.");
+      return;
+    }
+    if (!unitAsal) {
+      setError("Unit asal wajib dipilih.");
+      return;
+    }
+    if (!upDetail.trim()) {
+      setError("UP3/UPT/UPP/UPDL/Sektor wajib diisi.");
+      return;
+    }
+    if (!/^\d{9,15}$/.test(noHp.trim())) {
+      setError("No HP hanya boleh angka (9–15 digit).");
       return;
     }
     if (!provinsi.trim() || !kota.trim() || !kecamatan.trim() || !kelurahan.trim()) {
@@ -282,41 +325,6 @@ export default function EvpPage() {
     return false;
   };
 
-  const labelStyle: React.CSSProperties = {
-    display: "block",
-    marginBottom: "6px",
-    fontSize: "0.85rem",
-    fontWeight: 500,
-    color: "#0284c7",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  };
-
-  const hintStyle: React.CSSProperties = {
-    fontSize: "0.75rem",
-    color: "var(--text-muted)",
-    marginTop: "4px",
-  };
-
-  const Field = ({
-    label,
-    hint,
-    span,
-    children,
-  }: {
-    label: string;
-    hint?: string;
-    span: 3 | 4 | 6 | 8 | 12;
-    children: React.ReactNode;
-  }) => (
-    <div className={`kspan-${span}`}>
-      <label style={labelStyle} title={label}>{label}</label>
-      {children}
-      {hint && <div style={hintStyle}>{hint}</div>}
-    </div>
-  );
-
   return (
     <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
       <header style={{ marginBottom: "24px" }}>
@@ -348,11 +356,21 @@ export default function EvpPage() {
               <input className="input-field" value={nip} onChange={(e) => setNip(e.target.value)} />
             </Field>
             <Field label="No Hp" span={6}>
-              <input className="input-field" value={noHp} onChange={(e) => setNoHp(e.target.value)} />
+              <input
+                className="input-field"
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="tel"
+                maxLength={15}
+                placeholder="cth: 081234567890"
+                value={noHp}
+                onChange={(e) => setNoHp(e.target.value.replace(/\D/g, ""))}
+              />
             </Field>
             <Field label="Unit Asal" span={6}>
               <select className="input-field" value={unitAsal} onChange={(e) => setUnitAsal(e.target.value)}>
-                <option value="UID JAKARTA RAYA">UID JAKARTA RAYA</option>
+                <option value="">Pilih...</option>
                 {UNIT_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
               </select>
             </Field>
@@ -431,7 +449,7 @@ export default function EvpPage() {
             </button>
           </div>
           <p style={{ marginTop: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-            Identitas diprefill dari akun login. Pilih file eviden hanya tampilan — upload belum aktif.
+            Semua field diisi manual. Pilih file eviden hanya tampilan — upload belum aktif.
           </p>
         </section>
       )}
