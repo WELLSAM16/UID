@@ -105,6 +105,104 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: "8px", padding: "7px 0", borderBottom: "1px solid var(--card-border)", fontSize: "0.85rem" }}>
+      <div style={{ color: "var(--text-muted)", fontWeight: 600 }}>{label}</div>
+      <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>{children || <span style={{ color: "var(--text-muted)" }}>—</span>}</div>
+    </div>
+  );
+}
+
+function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginTop: "14px" }}>
+      <h4 style={{ margin: "0 0 4px 0", fontSize: "0.85rem", fontWeight: 700, color: "#0284c7" }}>{title}</h4>
+      {children}
+    </div>
+  );
+}
+
+/** Modal rincian 20 kolom SPS — dibuka saat baris daftar diklik (bukan tombol Ubah). */
+function StakeholderDetailModal({
+  row,
+  unitLabel,
+  onClose,
+  onEdit,
+}: {
+  row: StakeholderRow;
+  unitLabel: string;
+  onClose: () => void;
+  onEdit: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: "16px" }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: "var(--card-bg)", border: "1px solid var(--card-border)", borderRadius: "16px", maxWidth: "640px", width: "100%", maxHeight: "85vh", overflowY: "auto", padding: "24px 28px" }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "8px" }}>
+          <div style={{ marginRight: "auto" }}>
+            <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>{row.instansi}</h3>
+            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "4px" }}>
+              {unitLabel} • {row.quadrant} • kelengkapan {stakeholderCompleteness(row as any)}%
+            </div>
+          </div>
+          <button className="btn" onClick={onClose} style={{ background: "white", border: "1px solid var(--card-border)", fontSize: "0.85rem" }}>
+            ✕ Tutup
+          </button>
+        </div>
+
+        <DetailSection title="Identitas lembaga">
+          <DetailRow label="Alamat kantor">{row.alamat}</DetailRow>
+          <DetailRow label="Nama pimpinan">{row.namaPimpinan}</DetailRow>
+          <DetailRow label="Telp kantor">{row.telpKantor}</DetailRow>
+          <DetailRow label="HUT lembaga">{row.hutLembaga}</DetailRow>
+          <DetailRow label="Isu">{row.isu}</DetailRow>
+        </DetailSection>
+
+        <DetailSection title="Kontak">
+          <DetailRow label="No HP pimpinan">{row.noHpPimpinan}</DetailRow>
+          <DetailRow label="Tgl ultah pimpinan">{row.tglUltahPimpinan}</DetailRow>
+          <DetailRow label="Nama PIC">{row.namaPic}</DetailRow>
+          <DetailRow label="No HP PIC">{row.noHpPic}</DetailRow>
+        </DetailSection>
+
+        <DetailSection title="Klasifikasi & pengelolaan">
+          <DetailRow label="Sikap stakeholder">{row.sikap}</DetailRow>
+          <DetailRow label="Maping kuadran">{row.quadrant}</DetailRow>
+          <DetailRow label="Tujuan">{row.tujuan}</DetailRow>
+          <DetailRow label="Metode">{row.metode}</DetailRow>
+          <DetailRow label="Pelaksana">{row.pelaksana}</DetailRow>
+          <DetailRow label="Waktu">{row.waktu}</DetailRow>
+        </DetailSection>
+
+        <DetailSection title="Listrik & kerjasama">
+          <DetailRow label="Tarif / daya">{row.tarifDaya}</DetailRow>
+          <DetailRow label="Pemeliharaan">{row.pemeliharaan}</DetailRow>
+          <DetailRow label="MOU / PKS">{row.mouPks}</DetailRow>
+          <DetailRow label="Kerjasama anak prshn">{row.kerjasamaAnak}</DetailRow>
+        </DetailSection>
+
+        <div style={{ marginTop: "16px", display: "flex", gap: "8px" }}>
+          <button className="btn btn-primary" onClick={onEdit}>Ubah data ini</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Database Stakeholder — pengganti tab SPS per UP3/UP2D (20 kolom).
  * - Unit (staff/team_leader/asman): hanya melihat + mengisi daftar unitnya sendiri.
@@ -123,6 +221,7 @@ export default function StakeholderDatabasePage() {
   const [fUnit, setFUnit] = useState("");
   const [fQuery, setFQuery] = useState("");
   const [form, setForm] = useState({ ...EMPTY });
+  const [detail, setDetail] = useState<StakeholderRow | null>(null);
 
   const isAdmin =
     user?.role === "administrator" ||
@@ -428,7 +527,14 @@ export default function StakeholderDatabasePage() {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={7} style={{ textAlign: "center", padding: "48px", color: "var(--text-muted)" }}>Belum ada data. Tambahkan lewat form di atas.</td></tr>
               ) : filtered.map((r) => (
-                <tr key={r.id} style={{ borderBottom: "1px solid var(--card-border)" }}>
+                <tr
+                  key={r.id}
+                  onClick={() => setDetail(r)}
+                  title="Klik untuk lihat rincian"
+                  style={{ borderBottom: "1px solid var(--card-border)", cursor: "pointer" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(2, 132, 199, 0.06)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                >
                   <td style={{ padding: "10px 12px" }}>
                     <div style={{ fontWeight: 600 }}>{r.instansi}</div>
                     {isAdmin && <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{r.unitId}</div>}
@@ -439,10 +545,10 @@ export default function StakeholderDatabasePage() {
                   <td style={{ padding: "10px 12px" }}>{r.sikap}</td>
                   <td style={{ padding: "10px 12px" }}>{stakeholderCompleteness(r as any)}%</td>
                   <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
-                    <button className="btn" onClick={() => startEdit(r)} style={{ background: "white", border: "1px solid var(--card-border)", fontSize: "0.8rem", marginRight: "6px" }}>
+                    <button className="btn" onClick={(e) => { e.stopPropagation(); startEdit(r); }} style={{ background: "white", border: "1px solid var(--card-border)", fontSize: "0.8rem", marginRight: "6px" }}>
                       Ubah
                     </button>
-                    <button className="btn" onClick={() => handleDelete(r)} style={{ background: "white", border: "1px solid var(--card-border)", fontSize: "0.8rem", color: "var(--danger)" }}>
+                    <button className="btn" onClick={(e) => { e.stopPropagation(); handleDelete(r); }} style={{ background: "white", border: "1px solid var(--card-border)", fontSize: "0.8rem", color: "var(--danger)" }}>
                       Hapus
                     </button>
                   </td>
@@ -452,6 +558,15 @@ export default function StakeholderDatabasePage() {
           </table>
         </div>
       </section>
+
+      {detail && (
+        <StakeholderDetailModal
+          row={detail}
+          unitLabel={detail.unitId}
+          onClose={() => setDetail(null)}
+          onEdit={() => { const r = detail; setDetail(null); startEdit(r); }}
+        />
+      )}
 
       <style>{`
         .kunj-grid {
