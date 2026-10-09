@@ -38,6 +38,44 @@ function currentMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  marginBottom: "6px",
+  fontSize: "0.85rem",
+  fontWeight: 500,
+  color: "#0284c7",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const hintStyle: React.CSSProperties = {
+  fontSize: "0.75rem",
+  color: "var(--text-muted)",
+  marginTop: "4px",
+};
+
+/** Satu field dalam grid 12 kolom (top-level agar input tidak kehilangan fokus saat mengetik). */
+function Field({
+  label,
+  hint,
+  span,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  span: 3 | 4 | 6 | 8 | 12;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`kspan-${span}`}>
+      <label style={labelStyle} title={label}>{label}</label>
+      {children}
+      {hint && <div style={hintStyle}>{hint}</div>}
+    </div>
+  );
+}
+
 export default function EvpPage() {
   const { user, getToken } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
@@ -214,6 +252,10 @@ export default function EvpPage() {
       setError("Nama pegawai, NIP, No HP, nama program, dan deskripsi wajib diisi.");
       return;
     }
+    if (!/^\d{9,15}$/.test(noHp.trim())) {
+      setError("No HP hanya boleh angka (9–15 digit).");
+      return;
+    }
     if (!provinsi.trim() || !kota.trim() || !kecamatan.trim() || !kelurahan.trim()) {
       setError("Lokasi kegiatan (provinsi/kota/kecamatan/kelurahan) wajib diisi.");
       return;
@@ -282,41 +324,6 @@ export default function EvpPage() {
     return false;
   };
 
-  const labelStyle: React.CSSProperties = {
-    display: "block",
-    marginBottom: "6px",
-    fontSize: "0.85rem",
-    fontWeight: 500,
-    color: "#0284c7",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  };
-
-  const hintStyle: React.CSSProperties = {
-    fontSize: "0.75rem",
-    color: "var(--text-muted)",
-    marginTop: "4px",
-  };
-
-  const Field = ({
-    label,
-    hint,
-    span,
-    children,
-  }: {
-    label: string;
-    hint?: string;
-    span: 3 | 4 | 6 | 8 | 12;
-    children: React.ReactNode;
-  }) => (
-    <div className={`kspan-${span}`}>
-      <label style={labelStyle} title={label}>{label}</label>
-      {children}
-      {hint && <div style={hintStyle}>{hint}</div>}
-    </div>
-  );
-
   return (
     <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
       <header style={{ marginBottom: "24px" }}>
@@ -348,7 +355,17 @@ export default function EvpPage() {
               <input className="input-field" value={nip} onChange={(e) => setNip(e.target.value)} />
             </Field>
             <Field label="No Hp" span={6}>
-              <input className="input-field" value={noHp} onChange={(e) => setNoHp(e.target.value)} />
+              <input
+                className="input-field"
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="tel"
+                maxLength={15}
+                placeholder="cth: 081234567890"
+                value={noHp}
+                onChange={(e) => setNoHp(e.target.value.replace(/\D/g, ""))}
+              />
             </Field>
             <Field label="Unit Asal" span={6}>
               <select className="input-field" value={unitAsal} onChange={(e) => setUnitAsal(e.target.value)}>

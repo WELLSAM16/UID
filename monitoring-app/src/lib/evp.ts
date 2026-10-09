@@ -86,7 +86,8 @@ export function validateEvp(input: {
 }): ValidationResult {
   if (!String(input.namaPegawai || "").trim()) return { ok: false, error: "namaPegawai wajib diisi" };
   if (!String(input.nip || "").trim()) return { ok: false, error: "nip wajib diisi" };
-  if (!String(input.noHp || "").trim()) return { ok: false, error: "noHp wajib diisi" };
+  if (!/^\d{9,15}$/.test(String(input.noHp || "").trim()))
+    return { ok: false, error: "noHp hanya boleh angka (9–15 digit)" };
   if (!String(input.unitAsal || "").trim()) return { ok: false, error: "unitAsal wajib diisi" };
   if (!String(input.upDetail || "").trim()) return { ok: false, error: "UP3/UPT/UPP/UPDL/Sektor wajib diisi" };
   if (!(EVP_KATEGORI as readonly string[]).includes(String(input.kategoriProgram || "")))
