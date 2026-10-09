@@ -35,6 +35,14 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Permintaan lupa sandi (publik mengajukan via API, super admin mereset).
+    // Ditulis via Admin SDK (/api/password-resets); client langsung ditolak.
+    match /password_resets/{reqId} {
+      allow create: if false;
+      allow read: if request.auth != null && isSuperAdmin();
+      allow update, delete: if false;
+    }
+
     // Medmas KPI 2 (input manual + review, rekap bulanan).
     // Tulis via Admin SDK (/api/medmas); client langsung ditolak.
     match /medmas_entries/{docId} {
