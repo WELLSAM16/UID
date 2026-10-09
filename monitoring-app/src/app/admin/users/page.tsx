@@ -31,6 +31,18 @@ interface AccountRequestItem {
   note?: string | null;
 }
 
+interface PasswordResetItem {
+  id: string;
+  nip: string;
+  name: string;
+  email: string | null;
+  status: string;
+  emailSent?: boolean;
+  emailError?: string | null;
+  createdAt?: string;
+  note?: string | null;
+}
+
 const ROLE_OPTIONS = ["staff", "team_leader", "asman", "admin_uid", "administrator"];
 
 export default function AdminUsersPage() {
@@ -52,6 +64,10 @@ export default function AdminUsersPage() {
   // Pengajuan akun dari publik (/ajukan-akun)
   const [requests, setRequests] = useState<AccountRequestItem[]>([]);
   const [reqLoading, setReqLoading] = useState(false);
+
+  // Permintaan lupa sandi dari publik (/lupa-sandi) — notif untuk super admin
+  const [resets, setResets] = useState<PasswordResetItem[]>([]);
+  const [resetLoading, setResetLoading] = useState(false);
 
   async function authHeaders(): Promise<HeadersInit> {
     let token = await getToken();
@@ -78,6 +94,7 @@ export default function AdminUsersPage() {
       setLoading(false);
     }
     await loadRequests();
+    await loadResets();
   }
 
   async function loadRequests() {
@@ -116,6 +133,47 @@ export default function AdminUsersPage() {
     try {
       await callApi(`/api/account-requests/${r.id}`, "PATCH", { action: "reject", note });
       setMsg(`Pengajuan NIP ${r.nip} ditolak.`);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  async function loadResets() {
+    try {
+      setResetLoading(true);
+      const res = await fetch("/api/password-resets", { headers: await authHeaders(), cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `API ${res.status}`);
+      setResets(data.requests || []);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  const handleResetApprove = async (r: PasswordResetItem) => {
+    if (!confirm(`Reset password NIP ${r.nip} (${r.name})? Password default baru akan dikirim ke ${r.email || "— (tidak ada email, tampilkan manual)"}.`)) return;
+    try {
+      const data = await callApi(`/api/password-resets/${r.id}`, "PATCH", { action: "reset" });
+      if (data.emailSent) {
+        setMsg(`Password NIP ${r.nip} direset. Info akun terkirim ke ${r.email}.`);
+      } else {
+        setMsg(`Password NIP ${r.nip} direset TAPI email gagal (${data.emailError || "SMTP belum dikonfigurasi"}). Password default: ${data.tempPassword} — sampaikan manual.`);
+      }
+      await loadData();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleResetReject = async (r: PasswordResetItem) => {
+    const note = prompt(`Tolak permintaan reset NIP ${r.nip}? Alasan (opsional):`) ?? undefined;
+    if (note === undefined) return;
+    try {
+      await callApi(`/api/password-resets/${r.id}`, "PATCH", { action: "reject", note });
+      setMsg(`Permintaan reset NIP ${r.nip} ditolak.`);
       await loadData();
     } catch (err: any) {
       setError(err.message);
@@ -168,8 +226,9 @@ export default function AdminUsersPage() {
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setCreating(false);
+      setLoading(false);
     }
+    await loadRequests();
   };
 
   const handleRoleChange = async (u: ManagedUser, nextRole: string) => {
@@ -382,6 +441,67 @@ export default function AdminUsersPage() {
         )}
         <p style={{ marginTop: "10px", fontSize: "0.78rem", color: "var(--text-muted)" }}>
           Approve membuat akun + password acak 10 karakter, lalu mengirim NIP + password ke email. Bila SMTP belum diset / gagal, password ditampilkan ke admin untuk disampaikan manual. Siap disambung kirim via WA tahap berikutnya (field no. WA sudah disimpan).
+        </p>
+      </section>
+
+      {/* Permintaan lupa sandi — notif untuk super admin */}
+      <section className="glass-panel" style={{ padding: "20px 24px", marginBottom: "24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+          <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700 }}>
+            Permintaan Lupa Sandi {resets.filter((r) => r.status === "pending").length > 0 && (
+              <span style={{ marginLeft: "8px", fontSize: "0.75rem", background: "#ef4444", color: "white", borderRadius: "999px", padding: "2px 10px" }}>
+                {resets.filter((r) => r.status === "pending").length} menunggu reset
+              </span>
+            )}
+          </h2>
+          <button className="btn" onClick={loadResets} style={{ background: "white", border: "1px solid var(--card-border)", fontSize: "0.85rem" }}>
+            {resetLoading ? "Memuat..." : "Muat ulang"}
+          </button>
+        </div>
+        {resets.length === 0 ? (
+          <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Belum ada permintaan.</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--card-border)" }}>
+                  {["NIP", "NAMA", "EMAIL KONTAK", "STATUS", "AKSI"].map((c) => (
+                    <th key={c} style={{ padding: "10px 12px", textAlign: "left", color: "var(--text-muted)", fontSize: "0.72rem", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>{c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {resets.map((r) => (
+                  <tr key={r.id} style={{ borderBottom: "1px solid var(--card-border)" }}>
+                    <td style={{ padding: "10px 12px", fontWeight: 600, whiteSpace: "nowrap" }}>{r.nip}</td>
+                    <td style={{ padding: "10px 12px" }}>{r.name}</td>
+                    <td style={{ padding: "10px 12px" }}>{r.email || <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, color: "white",
+                        background: r.status === "pending" ? "#ef4444" : r.status === "approved" ? "#10b981" : "#6b7280" }}>
+                        {r.status === "pending" ? "Menunggu reset" : r.status === "approved" ? `Direset${r.emailSent === false ? " (email gagal)" : ""}` : "Ditolak"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+                      {r.status === "pending" && (
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <button onClick={() => handleResetApprove(r)} style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--card-border)", background: "rgba(16,185,129,0.12)", color: "var(--success)", cursor: "pointer", fontSize: "0.78rem" }}>
+                            Reset + kirim info
+                          </button>
+                          <button onClick={() => handleResetReject(r)} style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--card-border)", background: "rgba(239,68,68,0.1)", color: "var(--danger)", cursor: "pointer", fontSize: "0.78rem" }}>
+                            Tolak
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p style={{ marginTop: "10px", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+          Reset membuat password default acak, mengaktifkan akun, mewajibkan ganti sandi saat login berikutnya, lalu mengirim info akun (nama, NIP, password default, role, unit) ke email kontak. Bila email gagal, password ditampilkan ke admin untuk disampaikan manual.
         </p>
       </section>
 

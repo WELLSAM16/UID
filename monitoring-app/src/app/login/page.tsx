@@ -95,6 +95,9 @@ export default function LoginPage() {
               Ajukan Pembuatan Akun
             </button>
           </Link>
+          <Link href="/lupa-sandi" style={{ fontSize: "0.85rem", color: "#0284c7" }}>
+            Lupa Sandi?
+          </Link>
         </div>
 
         <p style={{ marginTop: "20px", fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: "1.5" }}>
