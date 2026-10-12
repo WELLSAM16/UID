@@ -177,12 +177,29 @@ export default function PumkMonitoringPage() {
         <div className="kpi-row" style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
           <MetricBox label="Total Mitra" value={kpi ? String(kpi.totalMitra) : "…"} sub={kpi ? `${kpi.toCount} masuk TO 2026` : undefined} color="#38bdf8" />
           <MetricBox label="Total Tunggakan" value={kpi ? rp(kpi.totalTunggakan) : "…"} sub="pokok + jasa (Jul 2026)" color="#38bdf8" />
-          <MetricBox
-            label="Komposisi"
-            value={kpi ? kpi.byKolektibilitas.map((b) => `${b.name} ${b.count}`).join(" • ") : "…"}
-            sub={kpi ? kpi.byKolektibilitas.map((b) => `${b.name}: ${rp(b.rupiah)}`).join(" • ") : undefined}
-            color="#38bdf8"
-          />
+          <div className="glass-card" style={{
+            padding: "20px 24px", flex: 1.4, minWidth: "220px",
+            position: "relative", overflow: "hidden", borderLeft: "4px solid #38bdf8",
+          }}>
+            <div style={{
+              position: "absolute", top: 0, right: 0, width: "80px", height: "80px",
+              background: "#38bdf8", opacity: 0.15, filter: "blur(25px)",
+              borderRadius: "50%", transform: "translate(30%, -30%)",
+            }}></div>
+            <div style={{ fontSize: "0.85rem", color: "#111", marginBottom: "12px", fontWeight: 500 }}>
+              Komposisi
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {kpi ? kpi.byKolektibilitas.map((b) => (
+                <div key={b.name} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: kolColor(b.name), flexShrink: 0 }} />
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#111" }}>{b.name}</span>
+                  <span style={{ marginLeft: "auto", fontSize: "1.05rem", fontWeight: 700, color: "#111" }}>{b.count}</span>
+                  <span style={{ fontSize: "0.75rem", color: "#111", whiteSpace: "nowrap" }}>{rp(b.rupiah)}</span>
+                </div>
+              )) : <div style={{ color: "#111" }}>…</div>}
+            </div>
+          </div>
           <MetricBox
             label="Tindak Lanjut"
             value={kpi ? `${kpi.selesai} selesai` : "…"}
