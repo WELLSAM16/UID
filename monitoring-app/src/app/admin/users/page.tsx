@@ -127,12 +127,16 @@ export default function AdminUsersPage() {
   };
 
   const handleReject = async (r: AccountRequestItem) => {
-    const note = prompt(`Tolak pengajuan NIP ${r.nip}? Alasan (opsional):`) ?? undefined;
+    const note = prompt(`Tolak pengajuan NIP ${r.nip}? Alasan (opsional, akan dikirim ke ${r.email}):`) ?? undefined;
     // prompt batal = undefined → jangan lanjut; string (termasuk "") = lanjut.
     if (note === undefined) return;
     try {
-      await callApi(`/api/account-requests/${r.id}`, "PATCH", { action: "reject", note });
-      setMsg(`Pengajuan NIP ${r.nip} ditolak.`);
+      const data = await callApi(`/api/account-requests/${r.id}`, "PATCH", { action: "reject", note });
+      if (data.emailSent) {
+        setMsg(`Pengajuan NIP ${r.nip} ditolak. Alasan terkirim ke ${r.email}.`);
+      } else {
+        setMsg(`Pengajuan NIP ${r.nip} ditolak TAPI email gagal (${data.emailError || "SMTP belum dikonfigurasi"}). Sampaikan manual ke ${r.email}.`);
+      }
       await loadData();
     } catch (err: any) {
       setError(err.message);
@@ -169,11 +173,15 @@ export default function AdminUsersPage() {
   };
 
   const handleResetReject = async (r: PasswordResetItem) => {
-    const note = prompt(`Tolak permintaan reset NIP ${r.nip}? Alasan (opsional):`) ?? undefined;
+    const note = prompt(`Tolak permintaan reset NIP ${r.nip}? Alasan (opsional, akan dikirim ke ${r.email || "—"}):`) ?? undefined;
     if (note === undefined) return;
     try {
-      await callApi(`/api/password-resets/${r.id}`, "PATCH", { action: "reject", note });
-      setMsg(`Permintaan reset NIP ${r.nip} ditolak.`);
+      const data = await callApi(`/api/password-resets/${r.id}`, "PATCH", { action: "reject", note });
+      if (data.emailSent) {
+        setMsg(`Permintaan reset NIP ${r.nip} ditolak. Alasan terkirim ke ${r.email}.`);
+      } else {
+        setMsg(`Permintaan reset NIP ${r.nip} ditolak TAPI email gagal (${data.emailError || "SMTP belum dikonfigurasi"}). Sampaikan manual.`);
+      }
       await loadData();
     } catch (err: any) {
       setError(err.message);
@@ -418,7 +426,7 @@ export default function AdminUsersPage() {
                     <td style={{ padding: "10px 12px" }}>
                       <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, color: "white",
                         background: r.status === "pending" ? "#f59e0b" : r.status === "approved" ? "#10b981" : "#6b7280" }}>
-                        {r.status === "pending" ? "Pending" : r.status === "approved" ? `Disetujui${r.emailSent === false ? " (email gagal)" : ""}` : "Ditolak"}
+                        {r.status === "pending" ? "Pending" : r.status === "approved" ? `Disetujui${r.emailSent === false ? " (email gagal)" : ""}` : `Ditolak${r.emailSent === false ? " (email gagal)" : ""}`}
                       </span>
                     </td>
                     <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
@@ -479,7 +487,7 @@ export default function AdminUsersPage() {
                     <td style={{ padding: "10px 12px" }}>
                       <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, color: "white",
                         background: r.status === "pending" ? "#ef4444" : r.status === "approved" ? "#10b981" : "#6b7280" }}>
-                        {r.status === "pending" ? "Menunggu reset" : r.status === "approved" ? `Direset${r.emailSent === false ? " (email gagal)" : ""}` : "Ditolak"}
+                        {r.status === "pending" ? "Menunggu reset" : r.status === "approved" ? `Direset${r.emailSent === false ? " (email gagal)" : ""}` : `Ditolak${r.emailSent === false ? " (email gagal)" : ""}`}
                       </span>
                     </td>
                     <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>

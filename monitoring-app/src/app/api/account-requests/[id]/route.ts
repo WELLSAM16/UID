@@ -3,8 +3,8 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 import { adminCreateAuthUser, adminUpdateAuthUser } from "@/lib/firebaseAuthAdmin";
 import { requireUser } from "@/lib/authServer";
 import { canManageRole, nipToEmail, ROLE_LABELS } from "@/lib/roles";
-import { generateTempPassword } from "@/lib/accountRequests";
-import { sendAccountCredentialEmail } from "@/lib/mailer";
+import { generateTempPassword, hasNipEmailConflict } from "@/lib/accountRequests";
+import { sendAccountCredentialEmail, sendAccountRejectionEmail } from "@/lib/mailer";
 
 const COLLECTION = "account_requests";
 
@@ -53,11 +53,32 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   const now = new Date().toISOString();
 
   if (action === "reject") {
+    const note = String(body.note || "").slice(0, 500) || null;
+    // Beritahu pemohon via email (alasan ikut terkirim). Kegagalan kirim
+    // tidak menggagalkan penolakan — admin tinggal hubungi manual.
+    const mail = await sendAccountRejectionEmail({
+      to: String(req.email || ""),
+      name: String(req.name || req.nip),
+      nip: String(req.nip),
+      note,
+    });
     await ref.set(
-      { status: "rejected", note: String(body.note || "").slice(0, 500) || null, decidedAt: now, decidedBy: user.uid },
+      {
+        status: "rejected",
+        note,
+        emailSent: mail.sent,
+        emailError: mail.sent ? null : mail.error || null,
+        decidedAt: now,
+        decidedBy: user.uid,
+      },
       { merge: true }
     );
-    return NextResponse.json({ ok: true, status: "rejected" });
+    return NextResponse.json({
+      ok: true,
+      status: "rejected",
+      emailSent: mail.sent,
+      ...(mail.sent ? {} : { emailError: mail.error }),
+    });
   }
 
   // --- Approve: role yang diminta harus dalam kewenangan admin ini ---
@@ -75,6 +96,15 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       { merge: true }
     );
     return NextResponse.json({ error: "NIP sudah terdaftar" }, { status: 409 });
+  }
+  // 1 NIP = 1 email: tolak bila pengajuan lain NIP ini sudah disetujui
+  // dengan email berbeda (balapan dua pengajuan email berbeda).
+  if (await hasNipEmailConflict(db, String(req.nip), String(req.email || ""))) {
+    await ref.set(
+      { status: "rejected", note: "NIP sudah terdaftar dengan email lain", decidedAt: now, decidedBy: user.uid },
+      { merge: true }
+    );
+    return NextResponse.json({ error: "NIP ini sudah disetujui dengan email lain" }, { status: 409 });
   }
 
   const tempPassword = generateTempPassword(10);

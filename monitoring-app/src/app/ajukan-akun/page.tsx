@@ -52,7 +52,7 @@ export default function AjukanAkunPage() {
         {ok ? (
           <div style={{ textAlign: "center" }}>
             <div style={{ padding: "14px 18px", borderRadius: "10px", background: "rgba(16,185,129,0.12)", color: "var(--success)", fontSize: "0.9rem", marginBottom: "20px" }}>
-              Pengajuan diterima. Tunggu email berisi NIP + password awal dari administrator, lalu login dan wajib ganti password.
+              Pengajuan diterima. Tunggu email berisi NIP + password awal dari administrator, lalu login dan wajib ganti password. Bila ditolak, alasannya juga dikirim ke email ini.
             </div>
             <Link href="/login">
               <button className="btn" style={{ background: "#38bdf8", color: "white" }}>Kembali ke Login</button>
@@ -100,6 +100,9 @@ export default function AjukanAkunPage() {
                 <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Email (untuk terima NIP + password)</label>
                 <input className="input-field" type="email" placeholder="nama@pln.co.id" value={email}
                   onChange={(e) => setEmail(e.target.value.trim())} />
+                <p style={{ margin: "6px 0 0 0", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                  Satu NIP hanya boleh memakai satu email. Pengajuan berikutnya dengan NIP ini wajib memakai email yang sama.
+                </p>
               </div>
               <div>
                 <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>

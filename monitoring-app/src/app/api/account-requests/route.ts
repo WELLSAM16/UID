@@ -11,6 +11,7 @@ import {
   REQUESTABLE_ROLES,
   validateRequestEmail,
   normalizePhone,
+  hasNipEmailConflict,
 } from "@/lib/accountRequests";
 
 const COLLECTION = "account_requests";
@@ -103,6 +104,14 @@ export async function POST(request: Request) {
   if (!dupPending.empty) {
     return NextResponse.json(
       { error: "NIP ini sudah mengajukan dan sedang menunggu persetujuan admin." },
+      { status: 409 }
+    );
+  }
+  // 1 NIP = 1 email kontak: tolak bila NIP ini pernah mengajukan/disetujui
+  // dengan email lain (pengajuan rejected yang dikoreksi tetap boleh).
+  if (await hasNipEmailConflict(db, nip, email)) {
+    return NextResponse.json(
+      { error: "NIP ini sudah terdaftar dengan email lain. Gunakan email yang sama seperti pengajuan sebelumnya." },
       { status: 409 }
     );
   }
