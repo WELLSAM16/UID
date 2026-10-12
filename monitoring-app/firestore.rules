@@ -141,6 +141,14 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"];
     }
 
+    // Target PUMK per unit per tahun (diset Admin UID, dibaca semua login).
+    // Tulis utama via Admin SDK (/api/pumk-targets); rules ini pengaman akses langsung.
+    match /pumk_targets/{targetId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["administrator", "admin_uid", "admin"];
+    }
+
     // Draf press release: pola sama seperti content_drafts (SLA 7 hari + TTL 90 hari).
     match /press_release_drafts/{draftId} {
       allow create: if request.auth != null

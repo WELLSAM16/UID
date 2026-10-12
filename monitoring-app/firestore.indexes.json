@@ -1,0 +1,79 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "content_drafts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "authorUid", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "content_drafts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "slaExpiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "press_release_drafts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "authorUid", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "press_release_drafts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "slaExpiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pumk_visits",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unitId", "order": "ASCENDING" },
+        { "fieldPath": "tanggalKunjungan", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "evp_reports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unitId", "order": "ASCENDING" },
+        { "fieldPath": "tanggalPelaksanaan", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "medmas_entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unitId", "order": "ASCENDING" },
+        { "fieldPath": "tanggal", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pumk_targets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unitId", "order": "ASCENDING" },
+        { "fieldPath": "tahun", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "stakeholder_activities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "kpi", "order": "ASCENDING" },
+        { "fieldPath": "bulan", "order": "ASCENDING" },
+        { "fieldPath": "unitId", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
