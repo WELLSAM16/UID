@@ -57,6 +57,7 @@ const MENUS: MainMenu[] = [
     icon: "💰",
     children: [
       { name: "Monitoring PUMK", href: "/pumk/monitoring", icon: "📉", desc: "Tunggakan UP3 Bintaro dari database UID" },
+      { name: "Target PUMK", href: "/pumk/target", icon: "🎯", desc: "Set target + pantau capaian per unit" },
       { name: "Laporan Kunjungan", href: "/pumk/kunjungan", icon: "📝", desc: "Pengganti g-form laporan UMK" },
     ],
   },

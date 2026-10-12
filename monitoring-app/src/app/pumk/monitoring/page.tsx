@@ -177,12 +177,27 @@ export default function PumkMonitoringPage() {
         <div className="kpi-row" style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
           <MetricBox label="Total Mitra" value={kpi ? String(kpi.totalMitra) : "…"} sub={kpi ? `${kpi.toCount} masuk TO 2026` : undefined} color="#38bdf8" />
           <MetricBox label="Total Tunggakan" value={kpi ? rp(kpi.totalTunggakan) : "…"} sub="pokok + jasa (Jul 2026)" color="#38bdf8" />
-          <MetricBox
-            label="Komposisi"
-            value={kpi ? kpi.byKolektibilitas.map((b) => `${b.name} ${b.count}`).join(" • ") : "…"}
-            sub={kpi ? kpi.byKolektibilitas.map((b) => `${b.name}: ${rp(b.rupiah)}`).join(" • ") : undefined}
-            color="#38bdf8"
-          />
+          {kpi ? kpi.byKolektibilitas.map((b) => (
+            <div key={b.name} className="glass-card" style={{
+              padding: "20px 24px", flex: 1, minWidth: "160px",
+              position: "relative", overflow: "hidden", borderLeft: `4px solid ${kolColor(b.name)}`,
+            }}>
+              <div style={{
+                position: "absolute", top: 0, right: 0, width: "80px", height: "80px",
+                background: kolColor(b.name), opacity: 0.15, filter: "blur(25px)",
+                borderRadius: "50%", transform: "translate(30%, -30%)",
+              }}></div>
+              <div style={{ fontSize: "0.85rem", color: "#111", marginBottom: "8px", fontWeight: 500 }}>
+                {b.name}
+              </div>
+              <div style={{ fontSize: "clamp(1.2rem, 5.5vw, 1.7rem)", fontWeight: 700, color: "#111", overflowWrap: "anywhere" }}>
+                {b.count} mitra
+              </div>
+              <div style={{ fontSize: "0.78rem", color: "#111", marginTop: "4px" }}>{rp(b.rupiah)}</div>
+            </div>
+          )) : (
+            <MetricBox label="Komposisi" value="…" color="#38bdf8" />
+          )}
           <MetricBox
             label="Tindak Lanjut"
             value={kpi ? `${kpi.selesai} selesai` : "…"}
