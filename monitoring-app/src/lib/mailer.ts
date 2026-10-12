@@ -84,6 +84,86 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function rejectionBody(opts: {
+  to: string;
+  name: string;
+  nip: string;
+  kindLabel: string;
+  note: string | null;
+}): { subject: string; text: string; html: string } {
+  const appName = "UID Jaya — Monitoring KU";
+  const loginUrl = process.env.APP_BASE_URL || "";
+  const subject = `[${appName}] ${opts.kindLabel} Anda ditolak — NIP ${opts.nip}`;
+  const reason = opts.note ? opts.note : "tanpa keterangan tambahan";
+  const text =
+    `Halo ${opts.name},\n\n` +
+    `${opts.kindLabel} akun ${appName} Anda dengan NIP ${opts.nip} DITOLAK oleh administrator.\n\n` +
+    `Alasan: ${reason}\n` +
+    (loginUrl ? `Login: ${loginUrl}/login\n\n` : `\n`) +
+    `Bila Anda merasa ada kekeliruan, hubungi administrator UID Jaya.\n\n` +
+    `Abaikan email ini bila Anda tidak merasa mengajukan permohonan.`;
+  const html =
+    `<p>Halo <b>${escapeHtml(opts.name)}</b>,</p>` +
+    `<p>${escapeHtml(opts.kindLabel)} akun <b>${escapeHtml(appName)}</b> Anda dengan NIP <b>${escapeHtml(opts.nip)}</b> <b>DITOLAK</b> oleh administrator.</p>` +
+    `<p>Alasan: ${escapeHtml(reason)}</p>` +
+    (loginUrl ? `<p>Login: <a href="${escapeHtml(loginUrl)}/login">${escapeHtml(loginUrl)}/login</a></p>` : ``) +
+    `<p>Bila Anda merasa ada kekeliruan, hubungi administrator UID Jaya.</p>` +
+    `<p style="color:#888;font-size:12px">Abaikan email ini bila Anda tidak merasa mengajukan permohonan.</p>`;
+  return { subject, text, html };
+}
+
+async function sendRejectionEmail(opts: {
+  to: string;
+  name: string;
+  nip: string;
+  kindLabel: string;
+  note: string | null;
+}): Promise<SendCredentialResult> {
+  const transporter = getTransport();
+  if (!transporter) {
+    return { sent: false, skipped: true, error: "SMTP belum dikonfigurasi (SMTP_HOST/USER/PASS kosong)" };
+  }
+  if (!opts.to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(opts.to.trim())) {
+    return { sent: false, error: "Email kontak pemohon tidak valid" };
+  }
+  const from = process.env.MAIL_FROM || process.env.SMTP_USER!;
+  const { subject, text, html } = rejectionBody(opts);
+  try {
+    await transporter.sendMail({ from, to: opts.to.trim(), subject, text, html });
+    return { sent: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("sendRejectionEmail error:", msg);
+    return { sent: false, error: msg };
+  }
+}
+
+/**
+ * Beritahu pemohon bahwa pengajuan akunnya DITOLAK (+ alasan bila ada).
+ * Dipakai saat super admin menolak di /api/account-requests/[id].
+ */
+export async function sendAccountRejectionEmail(opts: {
+  to: string;
+  name: string;
+  nip: string;
+  note: string | null;
+}): Promise<SendCredentialResult> {
+  return sendRejectionEmail({ ...opts, kindLabel: "Pengajuan akun" });
+}
+
+/**
+ * Beritahu pemohon bahwa permintaan reset passwordnya DITOLAK (+ alasan).
+ * Dipakai saat super admin menolak di /api/password-resets/[id].
+ */
+export async function sendPasswordResetRejectionEmail(opts: {
+  to: string;
+  name: string;
+  nip: string;
+  note: string | null;
+}): Promise<SendCredentialResult> {
+  return sendRejectionEmail({ ...opts, kindLabel: "Permintaan reset password" });
+}
+
 /**
  * Kirim info akun pasca-reset (profil + NIP + password default) ke email kontak.
  * Bila SMTP belum dikonfigurasi → { sent:false, skipped:true } agar

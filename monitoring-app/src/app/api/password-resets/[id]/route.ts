@@ -4,7 +4,7 @@ import { adminUpdateAuthUser } from "@/lib/firebaseAuthAdmin";
 import { requireUser } from "@/lib/authServer";
 import { ROLE_LABELS } from "@/lib/roles";
 import { generateTempPassword } from "@/lib/accountRequests";
-import { sendPasswordResetEmail } from "@/lib/mailer";
+import { sendPasswordResetEmail, sendPasswordResetRejectionEmail } from "@/lib/mailer";
 
 const COLLECTION = "password_resets";
 
@@ -54,11 +54,40 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   const now = new Date().toISOString();
 
   if (action === "reject") {
+    const note = String(body.note || "").slice(0, 500) || null;
+    // Beritahu pemohon via email (alasan ikut terkirim). Kegagalan kirim
+    // tidak menggagalkan penolakan — admin tinggal hubungi manual.
+    let emailSent = false;
+    let emailError: string | null = null;
+    if (req.email) {
+      const mail = await sendPasswordResetRejectionEmail({
+        to: String(req.email),
+        name: String(req.name || req.nip),
+        nip: String(req.nip),
+        note,
+      });
+      emailSent = mail.sent;
+      emailError = mail.sent ? null : mail.error || null;
+    } else {
+      emailError = "Pemohon tidak mencantumkan email kontak";
+    }
     await ref.set(
-      { status: "rejected", note: String(body.note || "").slice(0, 500) || null, decidedAt: now, decidedBy: user.uid },
+      {
+        status: "rejected",
+        note,
+        emailSent,
+        emailError,
+        decidedAt: now,
+        decidedBy: user.uid,
+      },
       { merge: true }
     );
-    return NextResponse.json({ ok: true, status: "rejected" });
+    return NextResponse.json({
+      ok: true,
+      status: "rejected",
+      emailSent,
+      ...(emailSent ? {} : { emailError }),
+    });
   }
 
   // --- Reset: cari akun by NIP ---

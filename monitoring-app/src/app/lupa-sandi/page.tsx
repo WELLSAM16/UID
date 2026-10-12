@@ -47,7 +47,7 @@ export default function LupaSandiPage() {
         {ok ? (
           <div style={{ textAlign: "center" }}>
             <div style={{ padding: "14px 18px", borderRadius: "10px", background: "rgba(16,185,129,0.12)", color: "var(--success)", fontSize: "0.9rem", marginBottom: "20px" }}>
-              Permintaan diterima dan diteruskan ke super admin. Setelah direset, login dengan password default lalu Anda wajib mengganti sandi.
+              Permintaan diterima dan diteruskan ke super admin. Setelah direset, login dengan password default lalu Anda wajib mengganti sandi. Bila ditolak, alasannya juga dikirim ke email ini.
             </div>
             <Link href="/login">
               <button className="btn" style={{ background: "#38bdf8", color: "white" }}>Kembali ke Login</button>
@@ -71,9 +71,9 @@ export default function LupaSandiPage() {
                 onChange={(e) => setName(e.target.value)} />
             </div>
             <div>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>
-                Email kontak <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>(wajib, password default hanya dikirim ke sini)</span>
-              </label>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>
+                  Email kontak <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>(wajib, harus sama dengan email saat akun dibuat)</span>
+                </label>
               <input className="input-field" type="email" placeholder="nama@pln.co.id" value={email}
                 onChange={(e) => setEmail(e.target.value.trim())} />
             </div>

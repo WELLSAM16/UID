@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { requireUser } from "@/lib/authServer";
 import { validateNip } from "@/lib/roles";
-import { validateRequestEmail } from "@/lib/accountRequests";
+import { validateRequestEmail, findBoundContactEmail, normContactEmail } from "@/lib/accountRequests";
 import { namesMatch } from "@/lib/passwordResets";
 
 const COLLECTION = "password_resets";
@@ -89,6 +89,16 @@ export async function POST(request: Request) {
   if (!dupPending.empty) {
     return NextResponse.json(
       { error: "NIP ini sudah mengajukan reset dan sedang menunggu super admin." },
+      { status: 409 }
+    );
+  }
+
+  // 1 NIP = 1 email kontak: email harus sama dengan yang dipakai saat akun
+  // disetujui / reset sebelumnya (bila sudah ada jejak).
+  const bound = await findBoundContactEmail(db, nip);
+  if (bound && bound !== normContactEmail(email)) {
+    return NextResponse.json(
+      { error: "NIP ini terdaftar dengan email lain. Gunakan email yang sama seperti sebelumnya." },
       { status: 409 }
     );
   }
