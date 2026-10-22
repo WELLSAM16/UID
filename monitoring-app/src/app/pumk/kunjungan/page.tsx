@@ -8,6 +8,8 @@ import {
   KONDISI_MITRA_OPTIONS,
 } from "@/lib/pumkVisit";
 import { UNIT_OPTIONS } from "@/lib/roles";
+import { validateMediaFile } from "@/lib/mediaShared";
+import { openMediaFile, uploadMediaFile } from "@/lib/mediaClient";
 
 interface Visit {
   id: string;
@@ -25,6 +27,12 @@ interface Visit {
   formOUrl?: string | null;
   dokumenLainUrl?: string | null;
   buktiBayarUrl?: string | null;
+  formOPath?: string | null;
+  formOName?: string | null;
+  dokumenLainPath?: string | null;
+  dokumenLainName?: string | null;
+  buktiBayarPath?: string | null;
+  buktiBayarName?: string | null;
   status: string;
   authorUid: string;
 }
@@ -72,6 +80,14 @@ export default function PumkKunjunganPage() {
   const [dokumenLainFile, setDokumenLainFile] = useState<File | null>(null);
   const [buktiBayarFile, setBuktiBayarFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+
+  // Lampirkan file ke draf yang sudah ada (mis. draf dibuat tanpa file).
+  const [attachFor, setAttachFor] = useState<Visit | null>(null);
+  const [atFormO, setAtFormO] = useState<File | null>(null);
+  const [atDokLain, setAtDokLain] = useState<File | null>(null);
+  const [atBukti, setAtBukti] = useState<File | null>(null);
+  const [attaching, setAttaching] = useState(false);
 
   const isAdmin = user?.role === "administrator" || user?.role === "admin_uid" || (user?.role as string) === "admin";
   const isSuperAdmin = user?.role === "administrator" || (user?.role as string) === "admin";
@@ -148,32 +164,98 @@ export default function PumkKunjunganPage() {
       setError("File bukti pembayaran wajib untuk Penagihan.");
       return;
     }
+
+    // Kumpulkan file yang dipilih -> dipetakan ke field dokumen.
+    const files: { field: string; nameField: string; file: File; label: string }[] = [];
+    if (formOFile) files.push({ field: "formOPath", nameField: "formOName", file: formOFile, label: "Form O" });
+    if (dokumenLainFile) files.push({ field: "dokumenLainPath", nameField: "dokumenLainName", file: dokumenLainFile, label: "Dokumen lain" });
+    if (buktiBayarFile) files.push({ field: "buktiBayarPath", nameField: "buktiBayarName", file: buktiBayarFile, label: "Bukti pembayaran" });
+    for (const f of files) {
+      const ferr = validateMediaFile(f.file);
+      if (ferr) {
+        setError(`${f.label}: ${ferr}`);
+        return;
+      }
+    }
+
+    setSaving(true);
+    setProgress(null);
+    setMsg(null);
+    let createdId: string | null = null;
     try {
-      setSaving(true);
-      // Kerangka tampilan saja: file yang dipilih BELUM diupload ke mana pun.
-      // URL bukti dikosongkan; upload Storage diaktifkan belakangan.
-      await callApi("/api/pumk-visits", "POST", {
+      // 1. Buat draf dulu supaya punya id (dipakai di path file).
+      const created = await callApi("/api/pumk-visits", "POST", {
         tanggalKunjungan: tanggal,
         noId, namaMitra, kolektibilitas,
         saldoPokok: pokok, saldoJasa: jasa, totalSaldo: total,
         jenisTindakLanjut: jenis,
         lokasiUrl: lokasiUrl || null,
         kondisiMitra: kondisiMitra || null,
-        formOUrl: null,
-        dokumenLainUrl: null,
-        buktiBayarUrl: null,
       });
-      setMsg("Laporan kunjungan tersimpan sebagai draf. (Upload file belum aktif — tampilan saja.)");
+      createdId = String(created.id);
+
+      // 2. Upload file langsung ke PC (tidak lewat Vercel).
+      if (files.length) {
+        const token = await getToken();
+        if (!token) throw new Error("Sesi login tidak ditemukan. Silakan login ulang.");
+        const patch: Record<string, unknown> = { action: "update" };
+        for (const f of files) {
+          setProgress(`${f.label}: menyiapkan...`);
+          const res = await uploadMediaFile({
+            token,
+            target: { collection: "pumk_visits", id: createdId, field: f.field },
+            file: f.file,
+            onProgress: (p) => setProgress(`${f.label}: ${p}%`),
+          });
+          patch[f.field] = res.path;
+          patch[f.nameField] = f.file.name.slice(0, 120);
+          setProgress(`${f.label}: selesai`);
+        }
+        // 3. Simpan path ke dokumen.
+        await callApi(`/api/pumk-visits/${createdId}`, "PATCH", patch);
+      }
+
+      setMsg(
+        files.length
+          ? "Laporan dan file bukti tersimpan sebagai draf."
+          : "Laporan kunjungan tersimpan sebagai draf."
+      );
       resetForm();
       await loadData();
     } catch (err: any) {
-      setError(err.message);
+      // Jangan tinggalkan draf setengah jadi: batalkan kalau baru dibuat.
+      if (createdId) {
+        try {
+          await callApi(`/api/pumk-visits/${createdId}`, "DELETE");
+        } catch {
+          /* draf mungkin sudah submitted; abaikan */
+        }
+      }
+      setError(err.message + (createdId ? " (draf dibatalkan)" : ""));
     } finally {
       setSaving(false);
+      setProgress(null);
+    }
+  };
+
+  /** Buka file bukti lewat URL bertoken 15 menit. */
+  const openFile = async (v: Visit, field: string) => {
+    try {
+      setError(null);
+      const token = await getToken();
+      if (!token) throw new Error("Sesi login tidak ditemukan.");
+      await openMediaFile({ token, target: { collection: "pumk_visits", id: v.id, field } });
+    } catch (err: any) {
+      setError(err.message);
     }
   };
 
   const handleAction = async (v: Visit, action: string) => {
+    if (action === "attach") {
+      setAtFormO(null); setAtDokLain(null); setAtBukti(null);
+      setAttachFor(v);
+      return;
+    }
     let note: string | undefined;
     if (action === "reject") {
       const n = prompt(`Tolak laporan "${v.noId} - ${v.namaMitra}"? Catatan:`);
@@ -199,6 +281,56 @@ export default function PumkKunjunganPage() {
     }
   };
 
+  /** Unggah file tambahan ke draf yang sudah ada (hanya selama status draf). */
+  const handleAttach = async () => {
+    const v = attachFor;
+    if (!v) return;
+    const jobs: { field: string; nameField: string; file: File; label: string }[] = [];
+    if (atFormO) jobs.push({ field: "formOPath", nameField: "formOName", file: atFormO, label: "Form O" });
+    if (atDokLain) jobs.push({ field: "dokumenLainPath", nameField: "dokumenLainName", file: atDokLain, label: "Dokumen lain" });
+    if (atBukti) jobs.push({ field: "buktiBayarPath", nameField: "buktiBayarName", file: atBukti, label: "Bukti pembayaran" });
+    if (!jobs.length) {
+      setError("Pilih minimal satu file.");
+      return;
+    }
+    for (const j of jobs) {
+      const ferr = validateMediaFile(j.file);
+      if (ferr) {
+        setError(`${j.label}: ${ferr}`);
+        return;
+      }
+    }
+
+    setAttaching(true);
+    setProgress(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Sesi login tidak ditemukan. Silakan login ulang.");
+      const patch: Record<string, unknown> = { action: "update" };
+      for (const j of jobs) {
+        setProgress(`${j.label}: menyiapkan...`);
+        const res = await uploadMediaFile({
+          token,
+          target: { collection: "pumk_visits", id: v.id, field: j.field },
+          file: j.file,
+          onProgress: (p) => setProgress(`${j.label}: ${p}%`),
+        });
+        patch[j.field] = res.path;
+        patch[j.nameField] = j.file.name.slice(0, 120);
+        setProgress(`${j.label}: selesai`);
+      }
+      await callApi(`/api/pumk-visits/${v.id}`, "PATCH", patch);
+      setMsg("File bukti tersimpan.");
+      setAttachFor(null);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setAttaching(false);
+      setProgress(null);
+    }
+  };
+
   const canReview = (v: Visit) => {
     if (isAdmin) return v.status === "pending";
     if ((user?.role === "team_leader" || user?.role === "asman") && v.unitId === user?.unitId && v.authorUid !== user?.uid) {
@@ -208,6 +340,18 @@ export default function PumkKunjunganPage() {
   };
 
   const rupiah = (n: number) => Number(n || 0).toLocaleString("id-ID");
+
+  const fileBtn: React.CSSProperties = {
+    background: "none",
+    border: 0,
+    padding: 0,
+    cursor: "pointer",
+    color: "var(--primary)",
+    textDecoration: "underline",
+    font: "inherit",
+    fontSize: "0.75rem",
+    fontWeight: 600,
+  };
 
   const labelStyle: React.CSSProperties = {
     display: "block",
@@ -330,13 +474,17 @@ export default function PumkKunjunganPage() {
             </div>
           )}
 
-          <div style={{ marginTop: "16px" }}>
+          <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={handleCreate} disabled={saving}>
               {saving ? "Menyimpan..." : "Simpan draf"}
             </button>
+            {progress && (
+              <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{progress}</span>
+            )}
           </div>
           <p style={{ marginTop: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-            Nomor ID mengacu ke Database PUMK (master read-only). Pilih file hanya tampilan — upload belum aktif.
+            Nomor ID mengacu ke Database PUMK (master read-only). File diunggah ke penyimpanan internal
+            (PDF/JPG/PNG/WebP, maks 10 MB); gambar diperkecil otomatis sebelum dikirim.
           </p>
         </section>
       )}
@@ -381,10 +529,25 @@ export default function PumkKunjunganPage() {
                   <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>{v.noId}</td>
                   <td style={{ padding: "10px 12px" }}>
                     <div>{v.namaMitra}</div>
-                    <div style={{ marginTop: "4px", display: "flex", gap: "8px", fontSize: "0.75rem" }}>
-                      {v.formOUrl && <a href={v.formOUrl} target="_blank" rel="noopener noreferrer">Form O</a>}
-                      {v.buktiBayarUrl && <a href={v.buktiBayarUrl} target="_blank" rel="noopener noreferrer">Bukti bayar</a>}
-                      {v.dokumenLainUrl && <a href={v.dokumenLainUrl} target="_blank" rel="noopener noreferrer">Dok. lain</a>}
+                    <div style={{ marginTop: "4px", display: "flex", gap: "10px", flexWrap: "wrap", fontSize: "0.75rem" }}>
+                      {v.formOPath && (
+                        <button type="button" onClick={() => openFile(v, "formOPath")} title={v.formOName || "Form O"} style={fileBtn}>
+                          Form O
+                        </button>
+                      )}
+                      {v.buktiBayarPath && (
+                        <button type="button" onClick={() => openFile(v, "buktiBayarPath")} title={v.buktiBayarName || "Bukti pembayaran"} style={fileBtn}>
+                          Bukti bayar
+                        </button>
+                      )}
+                      {v.dokumenLainPath && (
+                        <button type="button" onClick={() => openFile(v, "dokumenLainPath")} title={v.dokumenLainName || "Dokumen lain"} style={fileBtn}>
+                          Dok. lain
+                        </button>
+                      )}
+                      {v.formOUrl && <a href={v.formOUrl} target="_blank" rel="noopener noreferrer">Form O (lama)</a>}
+                      {v.buktiBayarUrl && <a href={v.buktiBayarUrl} target="_blank" rel="noopener noreferrer">Bukti bayar (lama)</a>}
+                      {v.dokumenLainUrl && <a href={v.dokumenLainUrl} target="_blank" rel="noopener noreferrer">Dok. lain (lama)</a>}
                     </div>
                   </td>
                   <td style={{ padding: "10px 12px" }}>{v.kolektibilitas}</td>
@@ -405,6 +568,7 @@ export default function PumkKunjunganPage() {
                     >
                       <option value="">— Aksi —</option>
                       {v.authorUid === user?.uid && v.status === "draft" && <option value="submit">Ajukan review</option>}
+                      {v.authorUid === user?.uid && v.status === "draft" && <option value="attach">Lampirkan file</option>}
                       {canReview(v) && <option value="approve">Setujui</option>}
                       {canReview(v) && <option value="reject">Tolak</option>}
                       {((v.authorUid === user?.uid && (v.status === "draft" || v.status === "rejected")) || isAdmin) && (
@@ -418,6 +582,61 @@ export default function PumkKunjunganPage() {
           </table>
         </div>
       </section>
+
+      {attachFor && (
+        <div
+          style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: "16px" }}
+          onClick={() => { if (!attaching) setAttachFor(null); }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "var(--card-bg)", border: "1px solid var(--card-border)", borderRadius: "16px", padding: "24px", width: "100%", maxWidth: "540px", maxHeight: "90vh", overflowY: "auto" }}
+          >
+            <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700 }}>
+              Lampirkan file
+            </h3>
+            <p style={{ margin: "6px 0 0", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+              {attachFor.noId} — {attachFor.namaMitra}. Hanya bisa selama status draf. File baru
+              menggantikan file lama pada field yang sama.
+            </p>
+
+            <div style={{ display: "grid", gap: "14px", marginTop: "18px" }}>
+              <div>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Form O</label>
+                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" disabled={attaching} onChange={(e) => setAtFormO(e.target.files?.[0] || null)} />
+                <div style={hintStyle}>
+                  {atFormO ? atFormO.name : attachFor.formOName ? `Tersimpan: ${attachFor.formOName}` : "Belum ada file"}
+                </div>
+              </div>
+              <div>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Dokumen lain</label>
+                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" disabled={attaching} onChange={(e) => setAtDokLain(e.target.files?.[0] || null)} />
+                <div style={hintStyle}>
+                  {atDokLain ? atDokLain.name : attachFor.dokumenLainName ? `Tersimpan: ${attachFor.dokumenLainName}` : "Belum ada file"}
+                </div>
+              </div>
+              <div>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Bukti pembayaran</label>
+                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" disabled={attaching} onChange={(e) => setAtBukti(e.target.files?.[0] || null)} />
+                <div style={hintStyle}>
+                  {atBukti ? atBukti.name : attachFor.buktiBayarName ? `Tersimpan: ${attachFor.buktiBayarName}` : "Belum ada file"}
+                </div>
+              </div>
+            </div>
+
+            {progress && (
+              <div style={{ marginTop: "12px", fontSize: "0.82rem", color: "var(--text-muted)" }}>{progress}</div>
+            )}
+
+            <div style={{ marginTop: "18px", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setAttachFor(null)} disabled={attaching}>Batal</button>
+              <button className="btn btn-primary" onClick={handleAttach} disabled={attaching}>
+                {attaching ? "Mengunggah..." : "Unggah"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .kunj-grid {
