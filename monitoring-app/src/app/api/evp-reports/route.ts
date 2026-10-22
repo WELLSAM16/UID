@@ -77,6 +77,8 @@ export async function POST(request: Request) {
     lokasiKecamatan: s(body.lokasiKecamatan),
     lokasiKelurahan: s(body.lokasiKelurahan),
     evidenUrl: s(body.evidenUrl) || null,
+    evidenPath: s(body.evidenPath) || null,
+    evidenName: s(body.evidenName) || null,
     tanggalPelaksanaan: s(body.tanggalPelaksanaan),
     deskripsi: s(body.deskripsi),
     status: "draft",

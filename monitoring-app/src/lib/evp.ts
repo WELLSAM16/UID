@@ -8,8 +8,8 @@
  *
  * Lokasi kegiatan untuk sementara teks bebas; dropdown berjenjang
  * Provinsi → Kota → Kecamatan → Kelurahan menyusul setelah ada master wilayah.
- * File eviden untuk sementara tampilan saja (belum diupload), mengikuti
- * keputusan yang sama dengan bukti kunjungan PUMK.
+ * File eviden diunggah ke penyimpanan internal PC (evidenPath + evidenName
+ * untuk nama asli); evidenUrl hanya tautan luar lama.
  */
 
 export type EvpStatus = "draft" | "pending" | "approved" | "rejected";
@@ -42,8 +42,12 @@ export interface EvpReport {
   lokasiKota: string;
   lokasiKecamatan: string;
   lokasiKelurahan: string;
-  /** Link eviden (upload Storage menyusul; untuk kini null). */
+  /** Link eviden lama (tautan luar) — data lama saja. */
   evidenUrl?: string | null;
+  /** Path file eviden di penyimpanan internal PC. */
+  evidenPath?: string | null;
+  /** Nama asli file eviden. */
+  evidenName?: string | null;
   /** Tanggal pelaksanaan YYYY-MM-DD */
   tanggalPelaksanaan: string;
   deskripsi: string;

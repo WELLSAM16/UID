@@ -11,6 +11,8 @@ import {
   type Wilayah,
 } from "@/lib/wilayah";
 import { UNIT_OPTIONS } from "@/lib/roles";
+import { validateMediaFile } from "@/lib/mediaShared";
+import { openMediaFile, uploadMediaFile } from "@/lib/mediaClient";
 
 interface Report {
   id: string;
@@ -24,6 +26,10 @@ interface Report {
   tanggalPelaksanaan: string;
   status: string;
   authorUid: string;
+  // Eviden: path file internal (evidenPath) + nama asli; evidenUrl = tautan lama.
+  evidenPath?: string | null;
+  evidenName?: string | null;
+  evidenUrl?: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -53,6 +59,18 @@ const hintStyle: React.CSSProperties = {
   fontSize: "0.75rem",
   color: "var(--text-muted)",
   marginTop: "4px",
+};
+
+const fileLink: React.CSSProperties = {
+  background: "none",
+  border: 0,
+  padding: 0,
+  cursor: "pointer",
+  color: "var(--primary)",
+  textDecoration: "underline",
+  font: "inherit",
+  fontSize: "0.8rem",
+  fontWeight: 600,
 };
 
 /** Satu field dalam grid 12 kolom (top-level agar input tidak kehilangan fokus saat mengetik). */
@@ -120,6 +138,7 @@ export default function EvpPage() {
   const [tanggal, setTanggal] = useState("");
   const [deskripsi, setDeskripsi] = useState("");
   const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
 
   const isAdmin = user?.role === "administrator" || user?.role === "admin_uid" || (user?.role as string) === "admin";
   const isSuperAdmin = user?.role === "administrator" || (user?.role as string) === "admin";
@@ -269,10 +288,18 @@ export default function EvpPage() {
       setError("Tanggal pelaksanaan wajib diisi.");
       return;
     }
+    if (evidenFile) {
+      const ferr = validateMediaFile(evidenFile);
+      if (ferr) {
+        setError(`File eviden: ${ferr}`);
+        return;
+      }
+    }
+    setSaving(true);
+    let createdId: string | null = null;
     try {
-      setSaving(true);
-      // Kerangka tampilan saja: file eviden BELUM diupload ke mana pun.
-      await callApi("/api/evp-reports", "POST", {
+      // 1. Simpan laporan dulu supaya punya id (dipakai di path file).
+      const created = await callApi("/api/evp-reports", "POST", {
         namaPegawai, nip, noHp, unitAsal, upDetail,
         kategoriProgram: kategori, namaProgram,
         lokasiProvinsi: provinsi, lokasiKota: kota,
@@ -281,13 +308,53 @@ export default function EvpPage() {
         tanggalPelaksanaan: tanggal,
         deskripsi,
       });
-      setMsg("Laporan EVP tersimpan sebagai draf. (Upload eviden belum aktif — tampilan saja.)");
+      createdId = String(created?.id || "");
+      if (!createdId) throw new Error("ID laporan tidak diterima dari server");
+
+      // 2. Upload eviden langsung ke PC (tidak lewat Vercel), lalu simpan path.
+      if (evidenFile) {
+        const token = await getToken();
+        if (!token) throw new Error("Sesi login tidak ditemukan. Silakan login ulang.");
+        setProgress("Eviden: menyiapkan...");
+        const up = await uploadMediaFile({
+          token,
+          target: { collection: "evp_reports", id: createdId, field: "evidenPath" },
+          file: evidenFile,
+          onProgress: (p) => setProgress(`Eviden: ${p}%`),
+        });
+        setProgress("Eviden: selesai");
+        await callApi(`/api/evp-reports/${createdId}`, "PATCH", {
+          evidenPath: up.path,
+          evidenName: evidenFile.name.slice(0, 120),
+          evidenUrl: null,
+        });
+      }
+
+      setMsg("Laporan EVP tersimpan sebagai draf." + (evidenFile ? " Eviden tersimpan di penyimpanan internal." : ""));
       resetForm();
       await loadData();
     } catch (err: any) {
-      setError(err.message);
+      // Jangan tinggalkan laporan baru yang setengah jadi.
+      if (createdId) {
+        try {
+          await callApi(`/api/evp-reports/${createdId}`, "DELETE");
+        } catch {
+          /* abaikan */
+        }
+      }
+      setError((err?.message || String(err)) + (createdId ? " (laporan dibatalkan)" : ""));
     } finally {
       setSaving(false);
+      setProgress(null);
+    }
+  };
+
+  /** Buka eviden lewat URL bertoken 15 menit. */
+  const openEviden = async (r: Report) => {
+    try {
+      await openMediaFile({ token: getToken, target: { collection: "evp_reports", id: r.id, field: "evidenPath" } });
+    } catch (err: any) {
+      setError(err?.message || String(err));
     }
   };
 
@@ -447,9 +514,13 @@ export default function EvpPage() {
             <button className="btn btn-primary" onClick={handleCreate} disabled={saving}>
               {saving ? "Menyimpan..." : "Simpan draf"}
             </button>
+            {progress && (
+              <span style={{ marginLeft: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>{progress}</span>
+            )}
           </div>
           <p style={{ marginTop: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-            Semua field diisi manual. Pilih file eviden hanya tampilan — upload belum aktif.
+            Semua field diisi manual. Eviden (PDF/JPG/PNG/WebP maks 10 MB) diunggah ke penyimpanan internal;
+            gambar diperkecil otomatis. Upload hanya saat draf — setelah diajukan, eviden terkunci.
           </p>
         </section>
       )}
@@ -478,16 +549,16 @@ export default function EvpPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--card-border)" }}>
-                {["TANGGAL", "PEGAWAI", "PROGRAM", "KATEGORI", "LOKASI", "STATUS", "AKSI"].map((c) => (
+                {["TANGGAL", "PEGAWAI", "PROGRAM", "KATEGORI", "LOKASI", "EVIDEN", "STATUS", "AKSI"].map((c) => (
                   <th key={c} style={{ padding: "10px 12px", textAlign: "left", color: "var(--text-muted)", fontSize: "0.72rem", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>{c}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} style={{ textAlign: "center", padding: "48px", color: "var(--text-muted)" }}>Memuat...</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: "center", padding: "48px", color: "var(--text-muted)" }}>Memuat...</td></tr>
               ) : reports.length === 0 ? (
-                <tr><td colSpan={7} style={{ textAlign: "center", padding: "48px", color: "var(--text-muted)" }}>Belum ada laporan bulan ini.</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: "center", padding: "48px", color: "var(--text-muted)" }}>Belum ada laporan bulan ini.</td></tr>
               ) : reports.map((r) => (
                 <tr key={r.id} style={{ borderBottom: "1px solid var(--card-border)" }}>
                   <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>{r.tanggalPelaksanaan}</td>
@@ -495,6 +566,19 @@ export default function EvpPage() {
                   <td style={{ padding: "10px 12px" }}>{r.namaProgram}</td>
                   <td style={{ padding: "10px 12px" }}>{r.kategoriProgram}</td>
                   <td style={{ padding: "10px 12px" }}>{r.lokasiKota}{r.lokasiProvinsi ? `, ${r.lokasiProvinsi}` : ""}</td>
+                  <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+                    {r.evidenPath ? (
+                      <button type="button" style={fileLink} title={r.evidenName || "Buka eviden"} onClick={() => openEviden(r)}>
+                        📎 {r.evidenName || "eviden"}
+                      </button>
+                    ) : r.evidenUrl ? (
+                      <a href={r.evidenUrl} target="_blank" rel="noreferrer" title="Tautan luar lama">🔗 lama</a>
+                    ) : r.evidenName ? (
+                      <span title="Nama tercatat, file belum diunggah">📎 {r.evidenName}</span>
+                    ) : (
+                      <span style={{ color: "var(--text-muted)" }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: "10px 12px" }}>
                     <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, color: "white",
                       background: r.status === "approved" ? "#10b981" : r.status === "pending" ? "#f59e0b" : r.status === "rejected" ? "#ef4444" : "#6b7280" }}>
