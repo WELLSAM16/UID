@@ -97,4 +97,16 @@ export const MEDIA_COLLECTIONS: Record<string, MediaCollectionRule> = {
     canWrite: (doc, user) => ownerEditable(doc, user, ["draft", "rejected"]),
     canRead: ownerOrAdmin,
   },
+
+  stakeholder_activities: {
+    prefix: "stakeholder-activities",
+    editableStatuses: ["draft", "revisi_tl"],
+    unitScoped: true,
+    // Satu field logis berisi banyak file (evidencePaths[]).
+    fields: {
+      evidencePaths: { folder: "bukti", label: "Bukti kegiatan" },
+    },
+    canWrite: (doc, user) => ownerEditable(doc, user, ["draft", "revisi_tl"]),
+    canRead: ownerUnitOrAdmin,
+  },
 };

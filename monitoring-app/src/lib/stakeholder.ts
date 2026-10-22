@@ -14,7 +14,7 @@
  *
  * Koleksi Firestore:
  * - stakeholders           : database stakeholder per unit
- * - stakeholder_activities : realisasi kegiatan per bulan + bukti Storage
+ * - stakeholder_activities : realisasi kegiatan per bulan + bukti (file internal)
  * - kpi_targets            : target & bobot (di-seed dari konstanta di bawah)
  */
 
@@ -347,7 +347,13 @@ export interface StakeholderActivity {
   bulan: number; // 1-12
   tahun: number;
   jumlah: number;
-  evidencePaths?: string[]; // path Firebase Storage (tanpa link eksternal)
+  /** Path file bukti di penyimpanan internal PC (bukan link publik). */
+  evidencePaths?: string[];
+  /** Nama asli file bukti (sejajar dengan evidencePaths). */
+  evidenceNames?: string[];
+  /** Tingkat pengaruh & kepentingan saat entri dibuat (untuk audit). */
+  pengaruh?: InfluenceLevel;
+  kepentingan?: InterestLevel;
   legacyEvidenceUrls?: string[]; // link GDrive warisan sheet (sebelum migrasi)
   status: ActivityStatus;
   asmanNote?: string | null;
@@ -361,7 +367,7 @@ export interface StakeholderActivity {
 /* kegiatan (judul format sheet + tanggal + pengaruh/kepentingan +      */
 /* keterangan + bukti). Sistem menurunkan kuadran otomatis. JUMLAH      */
 /* dihitung otomatis dari banyaknya entri (tidak diketik manual).      */
-/* API Firestore (/api/stakeholder-activities) menyusul.                */
+/* API: /api/stakeholder-activities (POST/GET) + /[id] (PATCH/DELETE).   */
 /* ------------------------------------------------------------------ */
 
 /** Tingkat pengaruh & kepentingan stakeholder (pengganti teks bebas). */
@@ -448,7 +454,8 @@ export function buildActivityPayload(d: EntryDraft, ctx: PayloadContext) {
     bulan: ctx.bulan,
     tahun: ctx.tahun,
     jumlah: 1,
-    evidencePlaceholders: [] as string[],
+    evidencePaths: [] as string[],
+    evidenceNames: [] as string[],
     status: "draft" as const,
     authorUid: ctx.authorUid,
   };

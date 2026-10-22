@@ -9,7 +9,6 @@ import {
   INTEREST_LEVELS,
   INFLUENCE_LEVELS,
   achievementPercent,
-  buildActivityPayload,
   kpiActivities,
   kpiForQuadrantStrict,
   quadrantFor,
@@ -19,7 +18,8 @@ import {
   type InterestLevel,
   type InfluenceLevel,
 } from "@/lib/stakeholder";
-import { validateStorageFile } from "@/lib/storage";
+import { validateMediaFile } from "@/lib/mediaShared";
+import { uploadMediaFile } from "@/lib/mediaClient";
 
 const MONTHS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -29,6 +29,7 @@ const MONTHS = [
 interface LocalEntry extends EntryDraft {
   localId: string;
   evidenceNames: string[];
+  evidenceFiles: File[];
 }
 
 const labelStyle: React.CSSProperties = {
@@ -69,13 +70,12 @@ const Field = ({
 /**
  * Pengisian KPI 5 & 6 — pengganti sheet.
  * Satu entri = satu kegiatan; JUMLAH otomatis dari banyaknya entri.
- * Bukti baru berupa file (validasi tipe/ukuran); upload Storage + API
- * (/api/stakeholder-activities) menyusul — tombol kirim disabled dan
- * payload siap kirim ditampilkan sebagai pratinjau JSON.
+ * Bukti diunggah ke penyimpanan internal PC (path disimpan, bukan link), lalu
+ * entri dikirim ke /api/stakeholder-activities sebagai pending_asman.
  * Target mengikuti cluster unit (A/B); cap KPI 5 = 110%, KPI 6 = 100%.
  */
 export default function StakeholderRealisasiPage() {
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
   const now = new Date();
   const [bulan, setBulan] = useState(now.getMonth() + 1);
   const [tahun, setTahun] = useState(now.getFullYear());
@@ -92,6 +92,10 @@ export default function StakeholderRealisasiPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [entries, setEntries] = useState<LocalEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
 
   const draftQuadrant =
     pengaruh && kepentingan ? quadrantFor(pengaruh, kepentingan) : null;
@@ -116,7 +120,7 @@ export default function StakeholderRealisasiPage() {
       return;
     }
     for (const f of files) {
-      const ferr = validateStorageFile(f);
+      const ferr = validateMediaFile(f);
       if (ferr) {
         setError(`Bukti "${f.name}": ${ferr}`);
         return;
@@ -131,22 +135,119 @@ export default function StakeholderRealisasiPage() {
             ? crypto.randomUUID()
             : `${Date.now()}-${prev.length}`,
         evidenceNames: files.map((f) => f.name),
+        evidenceFiles: files,
       },
     ]);
     setJudul("");
     setKeterangan("");
     setFiles([]);
     setError(null);
+    setMsg(null);
+    setSubmitError(null);
   };
 
-  const payloadPreview = entries.map((e) =>
-    buildActivityPayload(e, {
-      unitId: user?.unitId || "-",
-      authorUid: user?.uid || "-",
-      bulan,
-      tahun,
-    })
-  );
+  /** Kirim semua entri: buat dokumen → unggah bukti → ajukan ke Asman. */
+  const handleSubmit = async () => {
+    setSubmitError(null);
+    setMsg(null);
+    if (!entries.length) {
+      setSubmitError("Tambahkan minimal satu kegiatan sebelum mengirim.");
+      return;
+    }
+    if (!user?.unitId) {
+      setSubmitError("Akun belum punya unit. Hubungi administrator.");
+      return;
+    }
+    const token = await getToken();
+    if (!token) {
+      setSubmitError("Sesi login tidak ditemukan. Silakan login ulang.");
+      return;
+    }
+
+    setSubmitting(true);
+    const created: string[] = [];
+    try {
+      for (let i = 0; i < entries.length; i++) {
+        const e = entries[i];
+        setProgress(`Entri ${i + 1}/${entries.length}: menyimpan...`);
+        const res = await fetch("/api/stakeholder-activities", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            activityKey: e.activityKey,
+            tanggal: e.tanggal,
+            judul: e.judul,
+            pengaruh: e.pengaruh,
+            kepentingan: e.kepentingan,
+            keterangan: e.keterangan,
+            bulan,
+            tahun,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `API ${res.status}`);
+        const id = String(data?.id || "");
+        if (!id) throw new Error("ID kegiatan tidak diterima dari server");
+        created.push(id);
+
+        const paths: string[] = [];
+        const names: string[] = [];
+        for (let j = 0; j < e.evidenceFiles.length; j++) {
+          const f = e.evidenceFiles[j];
+          setProgress(`Entri ${i + 1}: bukti ${j + 1}/${e.evidenceFiles.length} — ${f.name}`);
+          const up = await uploadMediaFile({
+            token,
+            target: { collection: "stakeholder_activities", id, field: "evidencePaths" },
+            file: f,
+            onProgress: (p) =>
+              setProgress(`Entri ${i + 1}: bukti ${j + 1}/${e.evidenceFiles.length} — ${p}%`),
+          });
+          paths.push(up.path);
+          names.push(f.name.slice(0, 120));
+        }
+        if (paths.length) {
+          const pres = await fetch(`/api/stakeholder-activities/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ action: "update", evidencePaths: paths, evidenceNames: names }),
+          });
+          const pdata = await pres.json().catch(() => ({}));
+          if (!pres.ok) throw new Error(pdata.error || `API ${pres.status}`);
+        }
+
+        setProgress(`Entri ${i + 1}/${entries.length}: mengajukan ke Asman...`);
+        const sres = await fetch(`/api/stakeholder-activities/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: "submit" }),
+        });
+        const sdata = await sres.json().catch(() => ({}));
+        if (!sres.ok) throw new Error(sdata.error || `API ${sres.status}`);
+      }
+
+      setMsg(
+        `${entries.length} kegiatan terkirim ke Asman untuk direview` +
+          (entries.some((e) => e.evidenceFiles.length) ? " (dengan bukti)." : ".")
+      );
+      setEntries([]);
+    } catch (err: any) {
+      // Rollback: jangan tinggalkan kegiatan setengah jadi di server.
+      for (const id of created) {
+        try {
+          await fetch(`/api/stakeholder-activities/${id}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } catch {
+          /* abaikan */
+        }
+      }
+      setSubmitError((err?.message || String(err)) + (created.length ? " (pengiriman dibatalkan)" : ""));
+    } finally {
+      setSubmitting(false);
+      setProgress(null);
+    }
+  };
 
   return (
     <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
@@ -388,29 +489,42 @@ export default function StakeholderRealisasiPage() {
         )}
       </section>
 
-      {/* Pratinjau payload API */}
+      {/* Kirim ke Asman */}
       <section className="glass-panel" style={{ padding: "20px 24px", marginBottom: "24px" }}>
         <h2 style={{ margin: "0 0 8px 0", fontSize: "1.05rem", fontWeight: 700 }}>
-          Pratinjau payload API
+          Kirim ke Asman
         </h2>
         <p style={{ margin: "0 0 12px 0", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-          Tombol kirim aktif setelah <code>/api/stakeholder-activities</code> tersedia
-          (rules masih <code>write: false</code>).
+          {entries.length} entri siap dikirim. Bukti (PDF/JPG/PNG/WebP, maks. 10 MB/file) diunggah
+          langsung ke penyimpanan internal — file tidak lewat Vercel. Setelah terkirim, entri
+          menunggu review Asman dan tidak bisa diubah dari halaman ini.
         </p>
-        <pre style={{ margin: 0, padding: "16px", borderRadius: "10px", background: "var(--bg, #0f172a)", color: "#e2e8f0", fontSize: "0.75rem", overflowX: "auto", maxHeight: "320px", overflowY: "auto" }}>
-          {JSON.stringify(payloadPreview, null, 2)}
-        </pre>
         <button
-          disabled
-          title="API /api/stakeholder-activities menyusul"
+          onClick={handleSubmit}
+          disabled={submitting || entries.length === 0}
           style={{
-            marginTop: "16px", padding: "10px 20px", borderRadius: "10px",
-            border: "1px solid var(--card-border)", background: "var(--card-bg, #f1f5f9)",
-            color: "var(--text-muted)", fontWeight: 700, fontSize: "0.875rem", cursor: "not-allowed",
+            marginTop: "4px", padding: "10px 20px", borderRadius: "10px",
+            border: "none", background: entries.length && !submitting ? "var(--primary)" : "var(--card-bg, #f1f5f9)",
+            color: entries.length && !submitting ? "#fff" : "var(--text-muted)",
+            fontWeight: 700, fontSize: "0.875rem",
+            cursor: entries.length && !submitting ? "pointer" : "not-allowed",
           }}
         >
-          Kirim ke server (menyusul)
+          {submitting ? "Mengirim..." : `Kirim ${entries.length} entri ke Asman`}
         </button>
+        {progress && (
+          <div style={{ marginTop: "12px", fontSize: "0.82rem", color: "var(--text-muted)" }}>{progress}</div>
+        )}
+        {submitError && (
+          <p style={{ margin: "12px 0 0 0", fontSize: "0.85rem", color: "var(--danger)", fontWeight: 600 }}>
+            {submitError}
+          </p>
+        )}
+        {msg && (
+          <p style={{ margin: "12px 0 0 0", fontSize: "0.85rem", color: "var(--success)", fontWeight: 600 }}>
+            {msg}
+          </p>
+        )}
       </section>
 
       <style>{`
