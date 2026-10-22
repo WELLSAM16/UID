@@ -31,9 +31,13 @@
 - `press-release/drafts` (commit `bc4ebd7`): media press release alur yang sama + `PressDraftDetailModal`.
 - `evp` (commit `478ad2d`): eviden diunggah saat simpan draf; kolom EVIDEN + tombol buka; API
   `evp-reports` kini menyimpan `evidenPath`/`evidenName`.
-- `stakeholder/realisasi` (commit `d35de48`): API baru `/api/stakeholder-activities` (POST/GET) +
+- `stakeholder/realisasi` (commit `d35de48` + `af3ded2`): API baru `/api/stakeholder-activities` (POST/GET) +
   `/[id]` (PATCH `update|submit|transition`, DELETE); unggah bukti banyak file ke `evidencePaths[]`;
-  tombol "Kirim ke Asman" aktif (bukan lagi pratinjau JSON); `buildActivityPayload` diperbaiki.
+  tombol "Kirim ke Asman" aktif (bukan lagi pratinjau JSON); daftar "Kegiatan tersimpan" dari server +
+  buka bukti bertoken; `buildActivityPayload` diperbaiki.
+- `/api/files/download-url` mendukung field array (`index`), mis. `evidencePaths`; `nameFieldOf` memetakan
+  `...Paths` → `...Names`.
+- Commit terakhir branch: `daeeb28`; `tsc --noEmit` EXIT 0 dan `next build` EXIT 0 setelah setiap surface.
 - `mediaClient.openMediaFile` menerima `token` berupa fungsi `getToken` agar tab dibuka sebelum menunggu
   token (tidak diblokir popup).
 
