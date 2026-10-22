@@ -40,6 +40,7 @@ interface SavedActivity {
   judul: string;
   tanggal: string;
   status: ActivityStatus;
+  authorUid?: string;
   evidencePaths?: string[];
   evidenceNames?: string[];
   asmanNote?: string | null;
@@ -592,7 +593,8 @@ export default function StakeholderRealisasiPage() {
         ) : (
           saved.map((a) => {
             const act = activities.find((x) => x.key === a.activityKey);
-            const isEditable = a.status === "draft" || a.status === "revisi_tl";
+            const isEditable =
+              (a.status === "draft" || a.status === "revisi_tl") && a.authorUid === user?.uid;
             return (
               <div key={a.id} style={{ borderBottom: "1px solid var(--card-border)", padding: "12px 0" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
