@@ -117,6 +117,9 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     }
   }
   if (body.evidenUrl !== undefined) patch.evidenUrl = s(body.evidenUrl) || null;
+  for (const f of ["evidenPath", "evidenName"] as const) {
+    if (body[f] !== undefined) patch[f] = s(body[f]) || null;
+  }
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "Tidak ada field yang diubah" }, { status: 400 });
   }

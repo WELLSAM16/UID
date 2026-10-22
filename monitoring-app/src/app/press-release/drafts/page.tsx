@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useRouter } from "next/navigation";
 import PressDraftDetailModal from "@/components/PressDraftDetailModal";
-import { validateStorageFile } from "@/lib/storage";
+import { validateMediaFile } from "@/lib/mediaShared";
+import { openMediaFile, uploadMediaFile } from "@/lib/mediaClient";
 
 interface PressDraft {
   id: string;
@@ -12,7 +13,7 @@ interface PressDraft {
   body: string;
   // LEGACY tautan luar (data lama, tetap ditampilkan read-only).
   mediaUrl?: string;
-  // File internal Storage proyek (upload menyusul; kini nama dicatat).
+  // File internal: diunggah langsung ke PC, path disimpan di mediaPath.
   mediaPath?: string | null;
   mediaName?: string | null;
   notes?: string;
@@ -33,6 +34,18 @@ interface PressDraft {
 }
 
 const EMPTY = { title: "", body: "", notes: "", what: "", who: "", when: "", where: "", why: "", how: "" };
+
+const linkBtn: React.CSSProperties = {
+  background: "none",
+  border: 0,
+  padding: 0,
+  cursor: "pointer",
+  color: "var(--primary)",
+  textDecoration: "underline",
+  font: "inherit",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+};
 
 const W5H1_FIELDS = [
   { key: "what", label: "What — Apa peristiwanya?", placeholder: "Contoh: PLN meresmikan 10 SPKLU baru…" },
@@ -70,10 +83,11 @@ export default function PressDraftsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PressDraft | null>(null);
   const [form, setForm] = useState(EMPTY);
-  // File internal (belum diupload — hanya dicatat namanya).
+  // File internal: diunggah langsung ke penyimpanan PC (bukan Firebase Storage).
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [removeMedia, setRemoveMedia] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [selected, setSelected] = useState<PressDraft | null>(null);
 
   const authFetch = useCallback(
@@ -163,13 +177,15 @@ export default function PressDraftsPage() {
       return;
     }
     if (mediaFile) {
-      const ferr = validateStorageFile(mediaFile);
+      const ferr = validateMediaFile(mediaFile);
       if (ferr) {
         alert(`File media: ${ferr}`);
         return;
       }
     }
     setSaving(true);
+    setProgress(null);
+    let createdId: string | null = null;
     try {
       const payload: Record<string, unknown> = {
         title: form.title.trim(),
@@ -182,32 +198,78 @@ export default function PressDraftsPage() {
         why: form.why.trim() || undefined,
         how: form.how.trim() || undefined,
       };
-      // File baru: catat nama (upload via uploadPressDraftFile menyusul).
-      if (mediaFile) {
-        payload.mediaName = mediaFile.name;
-        payload.mediaPath = null;
-        payload.mediaUrl = null;
-      } else if (removeMedia) {
+      // Hapus media lama hanya bila tidak ada file pengganti.
+      if (removeMedia && !mediaFile) {
         payload.mediaName = null;
         payload.mediaPath = null;
         payload.mediaUrl = null;
       }
-      let res: Response;
+
+      // 1. Simpan metadata dulu supaya draf punya id (dipakai di path file).
+      let draftId = editing?.id || "";
       if (editing) {
-        res = await authFetch(`/api/press-drafts/${editing.id}`, {
+        const res = await authFetch(`/api/press-drafts/${editing.id}`, {
           method: "PATCH",
           body: JSON.stringify({ action: "update", ...payload }),
         });
+        await parseJson(res);
       } else {
-        res = await authFetch("/api/press-drafts", { method: "POST", body: JSON.stringify(payload) });
+        const res = await authFetch("/api/press-drafts", { method: "POST", body: JSON.stringify(payload) });
+        const data = await parseJson(res);
+        draftId = String(data?.draft?.id || "");
+        if (!draftId) throw new Error("ID draf tidak diterima dari server");
+        createdId = draftId;
       }
-      await parseJson(res);
+
+      // 2. Upload file langsung ke PC (tidak lewat Vercel), lalu simpan path.
+      if (mediaFile) {
+        const token = await getToken();
+        if (!token) throw new Error("Sesi login tidak ditemukan. Silakan login ulang.");
+        setProgress("Media: menyiapkan...");
+        const up = await uploadMediaFile({
+          token,
+          target: { collection: "press_release_drafts", id: draftId, field: "mediaPath" },
+          file: mediaFile,
+          onProgress: (p) => setProgress(`Media: ${p}%`),
+        });
+        setProgress("Media: selesai");
+        const res = await authFetch(`/api/press-drafts/${draftId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            action: "update",
+            ...payload,
+            mediaPath: up.path,
+            mediaName: mediaFile.name.slice(0, 120),
+            mediaUrl: null,
+          }),
+        });
+        await parseJson(res);
+      }
+
       setModalOpen(false);
       load();
     } catch (e: any) {
-      alert("Gagal menyimpan: " + e.message);
+      // Jangan tinggalkan draf baru yang setengah jadi.
+      if (createdId) {
+        try {
+          await authFetch(`/api/press-drafts/${createdId}`, { method: "DELETE" });
+        } catch {
+          /* abaikan */
+        }
+      }
+      alert("Gagal menyimpan: " + (e?.message || e) + (createdId ? " (draf dibatalkan)" : ""));
     } finally {
       setSaving(false);
+      setProgress(null);
+    }
+  };
+
+  /** Buka media draf lewat URL bertoken 15 menit. */
+  const openFile = async (d: PressDraft, field: "mediaPath") => {
+    try {
+      await openMediaFile({ token: getToken, target: { collection: "press_release_drafts", id: d.id, field } });
+    } catch (e: any) {
+      alert("Gagal membuka file: " + (e?.message || e));
     }
   };
 
@@ -335,14 +397,20 @@ export default function PressDraftsPage() {
                     {d.status === "rejected" && d.reviewNote && (
                       <div style={{ fontSize: "0.78rem", color: "var(--danger)", marginTop: "4px" }}>Catatan admin: {d.reviewNote}</div>
                     )}
+                    {d.mediaPath ? (
+                      <div style={{ fontSize: "0.75rem", marginTop: "4px" }} onClick={(e) => e.stopPropagation()}>
+                        <button type="button" style={linkBtn} title={d.mediaName || "Buka media"} onClick={() => openFile(d, "mediaPath")}>
+                          📎 {d.mediaName || "media"}
+                        </button>
+                      </div>
+                    ) : d.mediaName ? (
+                      <div style={{ fontSize: "0.75rem", marginTop: "4px" }} title="Nama tercatat, file belum diunggah">
+                        📎 {d.mediaName}
+                      </div>
+                    ) : null}
                     {d.mediaUrl && (
                       <div style={{ fontSize: "0.75rem", marginTop: "4px" }}>
                         <a href={d.mediaUrl} target="_blank" rel="noreferrer" title="Tautan luar lama">🔗 media (lama)</a>
-                      </div>
-                    )}
-                    {!d.mediaUrl && d.mediaName && (
-                      <div style={{ fontSize: "0.75rem", marginTop: "4px" }} title="File internal — upload menyusul">
-                        📎 {d.mediaName}
                       </div>
                     )}
                   </td>
@@ -413,9 +481,13 @@ export default function PressDraftsPage() {
                 ))}
               </details>
               <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Media gambar (PDF/gambar, maks 10 MB, opsional)
-                {(editing?.mediaUrl || editing?.mediaName) && !mediaFile && !removeMedia && (
+                {(editing?.mediaPath || editing?.mediaUrl || editing?.mediaName) && !mediaFile && !removeMedia && (
                   <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "6px" }}>
-                    Saat ini: {editing?.mediaName || editing?.mediaUrl}
+                    Saat ini: {editing?.mediaName || (editing?.mediaPath ? "file tersimpan" : editing?.mediaUrl)}
+                    {" "}
+                    {editing?.mediaPath && (
+                      <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => editing && openFile(editing, "mediaPath")}>Buka</button>
+                    )}
                     {editing?.mediaUrl && !editing?.mediaName && " (tautan luar lama)"}{" "}
                     <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => setRemoveMedia(true)}>Hapus</button>
                   </div>
@@ -437,7 +509,7 @@ export default function PressDraftsPage() {
                 )}
                 {mediaFile && (
                   <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "4px" }}>
-                    {mediaFile.name} ({(mediaFile.size / 1024).toFixed(0)} KB) — akan tersimpan di Storage internal (upload menyusul)
+                    {mediaFile.name} ({(mediaFile.size / 1024).toFixed(0)} KB) — akan diunggah ke penyimpanan internal
                   </div>
                 )}
               </label>
@@ -448,6 +520,9 @@ export default function PressDraftsPage() {
                 <button type="button" className="btn" style={{ background: "rgba(255,255,255,0.1)" }} onClick={() => setModalOpen(false)}>Batal</button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Menyimpan…" : "Simpan"}</button>
               </div>
+              {progress && (
+                <div style={{ marginTop: "10px", fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "right" }}>{progress}</div>
+              )}
             </form>
           </div>
         </div>

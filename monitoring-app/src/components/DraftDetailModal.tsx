@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { useAuth } from "@/lib/authContext";
+import { openMediaFile } from "@/lib/mediaClient";
 
 export interface DraftDetail {
   id: string;
@@ -46,7 +48,32 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
+const fileLink: React.CSSProperties = {
+  background: "none",
+  border: 0,
+  padding: 0,
+  cursor: "pointer",
+  color: "var(--primary)",
+  textDecoration: "underline",
+  font: "inherit",
+  fontSize: "0.85rem",
+  fontWeight: 600,
+};
+
 export default function DraftDetailModal({ draft, onClose }: { draft: DraftDetail; onClose: () => void }) {
+  const { getToken } = useAuth();
+
+  const openFile = async (field: "mediaPath" | "docPath") => {
+    try {
+      await openMediaFile({
+        token: getToken,
+        target: { collection: "content_drafts", id: draft.id, field },
+      });
+    } catch (e: any) {
+      alert("Gagal membuka file: " + (e?.message || e));
+    }
+  };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -134,19 +161,27 @@ export default function DraftDetailModal({ draft, onClose }: { draft: DraftDetai
           ) : null}
           {draft.notes ? <Row label="Catatan">{draft.notes}</Row> : null}
           <Row label="Media">
-            {draft.mediaUrl ? (
+            {draft.mediaPath ? (
+              <button type="button" onClick={() => openFile("mediaPath")} style={fileLink}>
+                📎 {draft.mediaName || "media tersimpan"}
+              </button>
+            ) : draft.mediaUrl ? (
               <a href={draft.mediaUrl} target="_blank" rel="noreferrer" style={{ overflowWrap: "anywhere" }}>🔗 {draft.mediaUrl} (tautan luar lama)</a>
             ) : draft.mediaName ? (
-              <>📎 {draft.mediaName} <span style={{ color: "var(--text-muted)" }}>(Storage internal — upload menyusul)</span></>
+              <>📎 {draft.mediaName} <span style={{ color: "var(--text-muted)" }}>(belum diunggah)</span></>
             ) : (
               "-"
             )}
           </Row>
           <Row label="Dokumen">
-            {draft.docUrl ? (
+            {draft.docPath ? (
+              <button type="button" onClick={() => openFile("docPath")} style={fileLink}>
+                📄 {draft.docName || "dokumen tersimpan"}
+              </button>
+            ) : draft.docUrl ? (
               <a href={draft.docUrl} target="_blank" rel="noreferrer" style={{ overflowWrap: "anywhere" }}>📄 {draft.docUrl} (tautan luar lama)</a>
             ) : draft.docName ? (
-              <>📎 {draft.docName} <span style={{ color: "var(--text-muted)" }}>(Storage internal — upload menyusul)</span></>
+              <>📄 {draft.docName} <span style={{ color: "var(--text-muted)" }}>(belum diunggah)</span></>
             ) : (
               "-"
             )}

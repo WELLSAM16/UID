@@ -61,7 +61,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Tidak berhak membuka file ini" }, { status: 403 });
   }
 
-  const path = String(doc[field] || "");
+  const path = (() => {
+    const raw = doc[field];
+    if (Array.isArray(raw)) {
+      const idx = Number(body.index);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= raw.length) return "";
+      return String(raw[idx] || "");
+    }
+    return String(raw || "");
+  })();
   if (!path) {
     return NextResponse.json({ error: "File belum diunggah" }, { status: 404 });
   }
@@ -70,7 +78,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Path file tidak valid" }, { status: 409 });
   }
 
-  const name = String(doc[nameFieldOf(field)] || path.split("/").pop() || "dokumen");
+  const nameIdx = Array.isArray(doc[field]) ? Number(body.index) : -1;
+  const rawName = doc[nameFieldOf(field)];
+  const name = String(
+    (Array.isArray(rawName) && nameIdx >= 0 ? rawName[nameIdx] : rawName) ||
+      path.split("/").pop() ||
+      "dokumen"
+  );
   const { url, expiresAt } = mediaTokenUrl({ o: "get", p: path, n: name.slice(0, 120) });
 
   return NextResponse.json({

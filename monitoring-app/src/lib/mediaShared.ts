@@ -24,6 +24,8 @@ export interface MediaTarget {
   collection: string;
   id: string;
   field: string;
+  /** Untuk field berbentuk array (mis. evidencePaths), pilih elemen ke-n. */
+  index?: number;
 }
 
 /** Isi token yang ditandatangani server dan diverifikasi PC. */
@@ -68,9 +70,9 @@ export function safeFileName(name: string): string {
   return base || "dokumen";
 }
 
-/** Nama field pasangan: formOPath -> formOName. */
+/** Nama field pasangan: formOPath -> formOName, evidencePaths -> evidenceNames. */
 export function nameFieldOf(pathField: string): string {
-  return pathField.endsWith("Path")
-    ? `${pathField.slice(0, -4)}Name`
-    : `${pathField}Name`;
+  if (pathField.endsWith("Paths")) return `${pathField.slice(0, -5)}Names`;
+  if (pathField.endsWith("Path")) return `${pathField.slice(0, -4)}Name`;
+  return `${pathField}Name`;
 }

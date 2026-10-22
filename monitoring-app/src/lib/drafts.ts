@@ -37,8 +37,8 @@ export interface DraftDoc {
   // tidak lagi menerima link — pakai file upload Storage internal di bawah.
   mediaUrl?: string;
   docUrl?: string;
-  // Storage internal proyek (upload menyusul; untuk kini nama file dicatat).
-  // mediaPath = path Storage (content-drafts/...), mediaName = nama file asli.
+  // Storage internal (penyimpanan PC): mediaPath/docPath, nama asli di *Name.
+  // mediaPath = path file (content-drafts/...), mediaName = nama file asli.
   mediaPath?: string;
   mediaName?: string;
   docPath?: string;
