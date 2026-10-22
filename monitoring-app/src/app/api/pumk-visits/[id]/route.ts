@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { requireUser } from "@/lib/authServer";
-import { validatePumkVisit } from "@/lib/pumkVisit";
+import { validatePumkVisit, isStoragePathOrEmpty } from "@/lib/pumkVisit";
 
 function readBody(raw: string): any {
   if (!raw) return {};
@@ -75,6 +75,13 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     if (doc.status !== "draft") {
       return NextResponse.json({ error: "Hanya draf yang bisa diajukan" }, { status: 409 });
     }
+    // Jangan biarkan laporan Penagihan diajukan tanpa bukti bayar.
+    if (String(doc.jenisTindakLanjut || "") === "Penagihan" && !doc.buktiBayarPath && !doc.buktiBayarUrl) {
+      return NextResponse.json(
+        { error: "Unggah file bukti pembayaran sebelum mengajukan laporan Penagihan." },
+        { status: 409 }
+      );
+    }
     await ref.set({ status: "pending", submittedAt: now, updatedAt: now }, { merge: true });
     return NextResponse.json({ ok: true, status: "pending" });
   }
@@ -110,6 +117,9 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       formOUrl: body.formOUrl ?? doc.formOUrl,
       dokumenLainUrl: body.dokumenLainUrl ?? doc.dokumenLainUrl,
       buktiBayarUrl: body.buktiBayarUrl ?? doc.buktiBayarUrl,
+      formOPath: body.formOPath ?? doc.formOPath,
+      dokumenLainPath: body.dokumenLainPath ?? doc.dokumenLainPath,
+      buktiBayarPath: body.buktiBayarPath ?? doc.buktiBayarPath,
     });
     if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
     if (body.tanggalKunjungan !== undefined) patch.tanggalKunjungan = s(body.tanggalKunjungan);
@@ -126,6 +136,27 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   if (body.formOUrl !== undefined) patch.formOUrl = s(body.formOUrl) || null;
   if (body.dokumenLainUrl !== undefined) patch.dokumenLainUrl = s(body.dokumenLainUrl) || null;
   if (body.buktiBayarUrl !== undefined) patch.buktiBayarUrl = s(body.buktiBayarUrl) || null;
+  const menyentuhFile =
+    body.formOPath !== undefined ||
+    body.dokumenLainPath !== undefined ||
+    body.buktiBayarPath !== undefined;
+  if (menyentuhFile && doc.status !== "draft") {
+    return NextResponse.json(
+      { error: "File bukti tidak bisa diubah setelah laporan diajukan. Buat laporan revisi baru." },
+      { status: 409 }
+    );
+  }
+  for (const key of ["formOPath", "dokumenLainPath", "buktiBayarPath"] as const) {
+    if (body[key] === undefined) continue;
+    if (!isStoragePathOrEmpty(body[key])) {
+      return NextResponse.json({ error: `${key} tidak valid` }, { status: 400 });
+    }
+    patch[key] = s(body[key]) || null;
+  }
+  for (const key of ["formOName", "dokumenLainName", "buktiBayarName"] as const) {
+    if (body[key] === undefined) continue;
+    patch[key] = s(body[key]).slice(0, 120) || null;
+  }
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "Tidak ada field yang diubah" }, { status: 400 });
   }
