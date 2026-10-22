@@ -285,9 +285,7 @@ export default function PumkKunjunganPage() {
   const openFile = async (v: Visit, field: string) => {
     try {
       setError(null);
-      const token = await getToken();
-      if (!token) throw new Error("Sesi login tidak ditemukan.");
-      await openMediaFile({ token, target: { collection: "pumk_visits", id: v.id, field } });
+      await openMediaFile({ token: getToken, target: { collection: "pumk_visits", id: v.id, field } });
     } catch (err: any) {
       setError(err.message);
     }

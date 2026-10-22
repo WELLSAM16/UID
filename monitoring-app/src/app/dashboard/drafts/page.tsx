@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useRouter } from "next/navigation";
 import DraftDetailModal from "@/components/DraftDetailModal";
-import { validateStorageFile } from "@/lib/storage";
+import { validateMediaFile } from "@/lib/mediaShared";
+import { openMediaFile, uploadMediaFile } from "@/lib/mediaClient";
 
 interface Draft {
   id: string;
@@ -14,7 +15,7 @@ interface Draft {
   // LEGACY tautan luar (data lama, tetap ditampilkan read-only).
   mediaUrl?: string;
   docUrl?: string;
-  // File internal Storage proyek (upload menyusul; kini nama dicatat).
+  // File internal: diunggah langsung ke PC, path disimpan di mediaPath/docPath.
   mediaPath?: string | null;
   mediaName?: string | null;
   docPath?: string | null;
@@ -32,6 +33,18 @@ interface Draft {
 }
 
 const EMPTY = { title: "", caption: "", accountTarget: "", scheduledAt: "", notes: "" };
+
+const linkBtn: React.CSSProperties = {
+  background: "none",
+  border: 0,
+  padding: 0,
+  cursor: "pointer",
+  color: "var(--primary)",
+  textDecoration: "underline",
+  font: "inherit",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+};
 
 function badge(status: string) {
   const map: Record<string, { bg: string; fg: string }> = {
@@ -60,13 +73,13 @@ export default function UserDraftsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [form, setForm] = useState(EMPTY);
-  // File internal (belum diupload — hanya dicatat namanya, ikut pola
-  // stakeholder realisasi + EVP/PUMK: validateStorageFile tampilan saja).
+  // File internal: diunggah langsung ke penyimpanan PC (bukan Firebase Storage).
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [docFile, setDocFile] = useState<File | null>(null);
   const [removeMedia, setRemoveMedia] = useState(false);
   const [removeDoc, setRemoveDoc] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [selected, setSelected] = useState<Draft | null>(null);
 
   const authFetch = useCallback(
@@ -150,7 +163,7 @@ export default function UserDraftsPage() {
   };
 
   const fileHint = (f: File | null) =>
-    f ? `${f.name} (${(f.size / 1024).toFixed(0)} KB) — akan tersimpan di Storage internal (upload menyusul)` : undefined;
+    f ? `${f.name} (${(f.size / 1024).toFixed(0)} KB)` : undefined;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,20 +172,23 @@ export default function UserDraftsPage() {
       return;
     }
     if (mediaFile) {
-      const ferr = validateStorageFile(mediaFile);
+      const ferr = validateMediaFile(mediaFile);
       if (ferr) {
         alert(`File media: ${ferr}`);
         return;
       }
     }
     if (docFile) {
-      const ferr = validateStorageFile(docFile);
+      const ferr = validateMediaFile(docFile);
       if (ferr) {
         alert(`File dokumen: ${ferr}`);
         return;
       }
     }
+
     setSaving(true);
+    setProgress(null);
+    let createdId: string | null = null;
     try {
       const payload: Record<string, unknown> = {
         title: form.title.trim(),
@@ -181,42 +197,89 @@ export default function UserDraftsPage() {
         scheduledAt: form.scheduledAt ? new Date(form.scheduledAt).toISOString() : undefined,
         notes: form.notes.trim() || undefined,
       };
-      // File baru: catat nama (upload Storage aktif belakangan via
-      // uploadDraftFile). Legacy link luar ikut dibersihkan saat diganti file.
-      if (mediaFile) {
-        payload.mediaName = mediaFile.name;
-        payload.mediaPath = null;
-        payload.mediaUrl = null;
-      } else if (removeMedia) {
+      // Hapus file/link lama hanya bila tidak ada file pengganti.
+      if (removeMedia && !mediaFile) {
         payload.mediaName = null;
         payload.mediaPath = null;
         payload.mediaUrl = null;
       }
-      if (docFile) {
-        payload.docName = docFile.name;
-        payload.docPath = null;
-        payload.docUrl = null;
-      } else if (removeDoc) {
+      if (removeDoc && !docFile) {
         payload.docName = null;
         payload.docPath = null;
         payload.docUrl = null;
       }
-      let res: Response;
+
+      // 1. Simpan metadata dulu supaya draf punya id (dipakai di path file).
+      let draftId = editing?.id || "";
       if (editing) {
-        res = await authFetch(`/api/drafts/${editing.id}`, {
+        const res = await authFetch(`/api/drafts/${editing.id}`, {
           method: "PATCH",
           body: JSON.stringify({ action: "update", ...payload }),
         });
+        await parseJson(res);
       } else {
-        res = await authFetch("/api/drafts", { method: "POST", body: JSON.stringify(payload) });
+        const res = await authFetch("/api/drafts", { method: "POST", body: JSON.stringify(payload) });
+        const data = await parseJson(res);
+        draftId = String(data?.draft?.id || "");
+        if (!draftId) throw new Error("ID draf tidak diterima dari server");
+        createdId = draftId;
       }
-      await parseJson(res);
+
+      // 2. Upload file langsung ke PC (tidak lewat Vercel), lalu simpan path.
+      const jobs: { field: string; nameField: string; file: File; label: string }[] = [];
+      if (mediaFile) jobs.push({ field: "mediaPath", nameField: "mediaName", file: mediaFile, label: "Media" });
+      if (docFile) jobs.push({ field: "docPath", nameField: "docName", file: docFile, label: "Dokumen" });
+
+      if (jobs.length) {
+        const token = await getToken();
+        if (!token) throw new Error("Sesi login tidak ditemukan. Silakan login ulang.");
+        const patch: Record<string, unknown> = { action: "update" };
+        // File baru menggantikan tautan luar lama (kalau ada).
+        if (mediaFile) patch.mediaUrl = null;
+        if (docFile) patch.docUrl = null;
+        for (const j of jobs) {
+          setProgress(`${j.label}: menyiapkan...`);
+          const up = await uploadMediaFile({
+            token,
+            target: { collection: "content_drafts", id: draftId, field: j.field },
+            file: j.file,
+            onProgress: (p) => setProgress(`${j.label}: ${p}%`),
+          });
+          patch[j.field] = up.path;
+          patch[j.nameField] = j.file.name.slice(0, 120);
+          setProgress(`${j.label}: selesai`);
+        }
+        const res = await authFetch(`/api/drafts/${draftId}`, {
+          method: "PATCH",
+          body: JSON.stringify(patch),
+        });
+        await parseJson(res);
+      }
+
       setModalOpen(false);
       load();
-    } catch (e: any) {
-      alert("Gagal menyimpan: " + e.message);
+    } catch (err: any) {
+      // Jangan tinggalkan draf baru yang setengah jadi.
+      if (createdId) {
+        try {
+          await authFetch(`/api/drafts/${createdId}`, { method: "DELETE" });
+        } catch {
+          /* abaikan */
+        }
+      }
+      alert("Gagal menyimpan: " + (err?.message || err) + (createdId ? " (draf dibatalkan)" : ""));
     } finally {
       setSaving(false);
+      setProgress(null);
+    }
+  };
+
+  /** Buka file draf lewat URL bertoken 15 menit. */
+  const openFile = async (d: Draft, field: "mediaPath" | "docPath") => {
+    try {
+      await openMediaFile({ token: getToken, target: { collection: "content_drafts", id: d.id, field } });
+    } catch (e: any) {
+      alert("Gagal membuka file: " + (e?.message || e));
     }
   };
 
@@ -345,11 +408,23 @@ export default function UserDraftsPage() {
                     {d.status === "rejected" && d.reviewNote && (
                       <div style={{ fontSize: "0.78rem", color: "var(--danger)", marginTop: "4px" }}>Catatan admin: {d.reviewNote}</div>
                     )}
-                    <div style={{ fontSize: "0.75rem", marginTop: "4px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <div style={{ fontSize: "0.75rem", marginTop: "4px", display: "flex", gap: "10px", flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
+                      {d.mediaPath ? (
+                        <button type="button" style={linkBtn} title={d.mediaName || "Buka media"} onClick={() => openFile(d, "mediaPath")}>
+                          📎 {d.mediaName || "media"}
+                        </button>
+                      ) : d.mediaName ? (
+                        <span title="Nama tercatat, file belum diunggah">📎 {d.mediaName}</span>
+                      ) : null}
                       {d.mediaUrl && <a href={d.mediaUrl} target="_blank" rel="noreferrer" title="Tautan luar lama">🔗 media (lama)</a>}
-                      {!d.mediaUrl && d.mediaName && <span title="File internal — upload menyusul">📎 {d.mediaName}</span>}
+                      {d.docPath ? (
+                        <button type="button" style={linkBtn} title={d.docName || "Buka dokumen"} onClick={() => openFile(d, "docPath")}>
+                          📄 {d.docName || "dokumen"}
+                        </button>
+                      ) : d.docName ? (
+                        <span title="Nama tercatat, file belum diunggah">📄 {d.docName}</span>
+                      ) : null}
                       {d.docUrl && <a href={d.docUrl} target="_blank" rel="noreferrer" title="Tautan luar lama">📄 dokumen (lama)</a>}
-                      {!d.docUrl && d.docName && <span title="File internal — upload menyusul">📎 {d.docName}</span>}
                     </div>
                   </td>
                   <td style={{ fontSize: "0.85rem" }}>{d.accountTarget}</td>
@@ -388,9 +463,9 @@ export default function UserDraftsPage() {
           <div className="glass-panel" style={{ padding: "28px", width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto" }}>
             <h2 style={{ marginBottom: "16px" }}>{editing ? "Edit Draf" : "Buat Draf Baru"}</h2>
             <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "16px" }}>
-              File media & dokumen tersimpan di Storage internal proyek (bukan Drive).
-              Pilih file PDF/gambar maks 10 MB — upload aktif belakangan, untuk kini nama file dicatat.
-              Video belum didukung. Data lama bertautan luar tetap bisa dibuka (label “lama”).
+              File media & dokumen diunggah ke penyimpanan internal (langsung ke server, bukan Drive).
+              PDF/JPG/PNG/WebP maks 10 MB; gambar diperkecil otomatis. Video belum didukung.
+              Data lama bertautan luar tetap bisa dibuka (label “lama”).
             </p>
             <form onSubmit={handleSave}>
               <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Judul*
@@ -403,9 +478,13 @@ export default function UserDraftsPage() {
                 <input className="input-field" value={form.accountTarget} onChange={(e) => setForm({ ...form, accountTarget: e.target.value })} placeholder="mis. welldrone" style={{ marginTop: "6px" }} />
               </label>
               <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Media — foto/ilustrasi (PDF/gambar, maks 10 MB, opsional)
-                {(editing?.mediaUrl || editing?.mediaName) && !mediaFile && !removeMedia && (
+                {(editing?.mediaPath || editing?.mediaUrl || editing?.mediaName) && !mediaFile && !removeMedia && (
                   <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "6px" }}>
-                    Saat ini: {editing?.mediaName || editing?.mediaUrl}
+                    Saat ini: {editing?.mediaName || (editing?.mediaPath ? "file tersimpan" : editing?.mediaUrl)}
+                    {" "}
+                    {editing?.mediaPath && (
+                      <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => editing && openFile(editing, "mediaPath")}>Buka</button>
+                    )}
                     {editing?.mediaUrl && !editing?.mediaName && " (tautan luar lama)"}{" "}
                     <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => setRemoveMedia(true)}>Hapus</button>
                   </div>
@@ -428,9 +507,13 @@ export default function UserDraftsPage() {
                 {fileHint(mediaFile) && <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "4px" }}>{fileHint(mediaFile)}</div>}
               </label>
               <label style={{ display: "block", marginBottom: "12px", fontSize: "0.9rem" }}>Dokumen rencana PDF (PDF/gambar, maks 10 MB, opsional)
-                {(editing?.docUrl || editing?.docName) && !docFile && !removeDoc && (
+                {(editing?.docPath || editing?.docUrl || editing?.docName) && !docFile && !removeDoc && (
                   <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "6px" }}>
-                    Saat ini: {editing?.docName || editing?.docUrl}
+                    Saat ini: {editing?.docName || (editing?.docPath ? "file tersimpan" : editing?.docUrl)}
+                    {" "}
+                    {editing?.docPath && (
+                      <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => editing && openFile(editing, "docPath")}>Buka</button>
+                    )}
                     {editing?.docUrl && !editing?.docName && " (tautan luar lama)"}{" "}
                     <button type="button" className="btn" style={{ padding: "2px 8px", fontSize: "0.75rem" }} onClick={() => setRemoveDoc(true)}>Hapus</button>
                   </div>
@@ -462,6 +545,9 @@ export default function UserDraftsPage() {
                 <button type="button" className="btn" style={{ background: "rgba(255,255,255,0.1)" }} onClick={() => setModalOpen(false)}>Batal</button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Menyimpan…" : "Simpan"}</button>
               </div>
+              {progress && (
+                <div style={{ marginTop: "10px", fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "right" }}>{progress}</div>
+              )}
             </form>
           </div>
         </div>

@@ -184,14 +184,20 @@ export async function fetchMediaUrl(params: {
 
 /** Buka file di tab baru (URL 15 menit, jadi jangan disimpan/di-bookmark). */
 export async function openMediaFile(params: {
-  token: string;
+  /**
+   * Token langsung, atau fungsi `getIdToken` (mis. `getToken` dari useAuth).
+   * Pakai fungsi agar tab bisa dibuka SEBELUM menunggu token — kalau menunggu
+   * dulu, browser menganggapnya bukan aksi user dan memblokir popup.
+   */
+  token: string | (() => Promise<string | null>);
   target: MediaTarget;
 }): Promise<void> {
-  // Buka tab kosong lebih dulu: kalau menunggu fetch, browser menganggapnya
-  // bukan aksi user dan memblokir popup.
   const tab = window.open("about:blank", "_blank");
   try {
-    const { url } = await fetchMediaUrl(params);
+    const token =
+      typeof params.token === "function" ? await params.token() : params.token;
+    if (!token) throw new Error("Sesi login tidak ditemukan. Silakan login ulang.");
+    const { url } = await fetchMediaUrl({ token, target: params.target });
     if (tab) {
       tab.opener = null;
       tab.location.replace(url);
