@@ -54,6 +54,49 @@ function today(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  marginBottom: "6px",
+  fontSize: "0.85rem",
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const hintStyle: React.CSSProperties = {
+  fontSize: "0.75rem",
+  color: "var(--text-muted)",
+  marginTop: "4px",
+};
+
+/**
+ * Satu field dalam grid 12 kolom.
+ *
+ * WAJIB di level modul: kalau didefinisikan di dalam komponen, tipe komponennya
+ * berubah setiap render sehingga React meng-unmount input dan fokus hilang
+ * setelah satu karakter.
+ */
+function Field({
+  label,
+  hint,
+  span,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  span: 3 | 4 | 6 | 8 | 12;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`kspan-${span}`}>
+      <label style={labelStyle} title={label}>{label}</label>
+      {children}
+      {hint && <div style={hintStyle}>{hint}</div>}
+    </div>
+  );
+}
+
 export default function PumkKunjunganPage() {
   const { user, getToken } = useAuth();
   const [visits, setVisits] = useState<Visit[]>([]);
@@ -352,41 +395,6 @@ export default function PumkKunjunganPage() {
     fontSize: "0.75rem",
     fontWeight: 600,
   };
-
-  const labelStyle: React.CSSProperties = {
-    display: "block",
-    marginBottom: "6px",
-    fontSize: "0.85rem",
-    fontWeight: 600,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  };
-
-  const hintStyle: React.CSSProperties = {
-    fontSize: "0.75rem",
-    color: "var(--text-muted)",
-    marginTop: "4px",
-  };
-
-  /** Satu field dalam grid 12 kolom. */
-  const Field = ({
-    label,
-    hint,
-    span,
-    children,
-  }: {
-    label: string;
-    hint?: string;
-    span: 3 | 4 | 6 | 8 | 12;
-    children: React.ReactNode;
-  }) => (
-    <div className={`kspan-${span}`}>
-      <label style={labelStyle} title={label}>{label}</label>
-      {children}
-      {hint && <div style={hintStyle}>{hint}</div>}
-    </div>
-  );
 
   return (
     <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
