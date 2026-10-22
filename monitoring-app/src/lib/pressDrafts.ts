@@ -11,8 +11,8 @@
  * where, why, how). Semua user boleh mengajukan; review oleh admin.
  *
  * Catatan storage: mediaUrl LEGACY (tautan luar, hanya dibaca untuk data
- * lama). Form baru memakai file upload Storage internal (mediaPath/mediaName,
- * upload menyusul; untuk kini nama file dicatat).
+ * lama). Form baru memakai file upload ke penyimpanan internal PC
+ * (mediaPath/mediaName).
  *
  * File ini murni (tanpa dependensi node) agar bisa diimpor API maupun client.
  */
@@ -43,7 +43,7 @@ export interface PressDraftDoc {
   body: string;
   // LEGACY (tautan luar): hanya dibaca untuk data lama.
   mediaUrl?: string;
-  // Storage internal proyek (upload menyusul; untuk kini nama file dicatat).
+  // Storage internal (penyimpanan PC): mediaPath + nama asli di mediaName.
   mediaPath?: string;
   mediaName?: string;
   notes?: string;

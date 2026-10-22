@@ -233,7 +233,7 @@ export default function UserDraftsPage() {
       if (jobs.length) {
         const token = await getToken();
         if (!token) throw new Error("Sesi login tidak ditemukan. Silakan login ulang.");
-        const patch: Record<string, unknown> = { action: "update" };
+        const patch: Record<string, unknown> = { action: "update", ...payload };
         // File baru menggantikan tautan luar lama (kalau ada).
         if (mediaFile) patch.mediaUrl = null;
         if (docFile) patch.docUrl = null;
