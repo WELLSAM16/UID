@@ -1,16 +1,32 @@
-# SESSION_NOW — status aktif (23 Okt 2026)
+# SESSION_NOW — status aktif (26 Okt 2026)
 
 > Baca file ini saja saat membuka sesi baru. Detail historis: `SESSION_RESUME.md` (jangan dibaca penuh).
 
 ## Posisi sekarang
-- Branch `feat-draft-internal-storage` @ `1b0170d`, sudah di-push. `origin/master` @ `2583441` (PR #14).
-- **Belum ada PR baru** untuk fitur media. Langkah user:
+- Branch `feat-draft-internal-storage` @ `72177b9`, sudah di-push. `origin/master` @ `34f15fd`
+  (merge PR #19; seluruh surface media sudah live).
+- **Satu commit belum di-merge**: `72177b9` — target PUMK massal. Langkah user:
   `https://github.com/WELLSAM16/UID/compare/master...feat-draft-internal-storage?expand=1`
-  judul saran: "Media: unggah file ke penyimpanan internal (draf konten, press release, EVP, stakeholder)".
-- Sudah live & terbukti di production: **PUMK kunjungan** (bukti uji 23 Okt di bawah).
-- Belum live (menunggu merge): draf konten, draf press release, EVP, stakeholder realisasi.
-- `tsc --noEmit` EXIT 0, `next build` EXIT 0 setelah tiap surface. Working tree: `M SESSION_RESUME.md`,
-  `D NOTULENSI.md`, `?? monitoring-app/docs/` (jangan sentuh). `gh` CLI tidak ada → cek PR via API.
+  judul saran: "PUMK: set target massal untuk semua unit UP2D/UP3".
+- Sudah live & terbukti di production: **PUMK kunjungan** (bukti uji 23 Okt di bawah) + seluruh
+  surface media (draf konten, draf press release, EVP, stakeholder realisasi) via PR #18/#19.
+- `tsc --noEmit` EXIT 0, `eslint` file terkait EXIT 0, `next build` EXIT 0 (26 Okt).
+  Working tree: `M SESSION_RESUME.md`, `D NOTULENSI.md`, `?? monitoring-app/docs/` (jangan sentuh).
+  `gh` CLI tidak ada → cek PR via API.
+
+## Sesi 26 Okt — target PUMK massal (`72177b9`)
+- Endpoint baru `POST /api/pumk-targets/bulk` (admin, satu transaksi Firestore, maks 17 unit):
+  upsert per `(unitId, tahun)`, `overwrite:false` untuk melewati target lama, unit UID ditolak,
+  duplikat/negatif/tahun salah ditolak 400. `assignedNoIds` + `createdAt` baris lama dipertahankan;
+  baris `Paused` diaktifkan kembali tanpa membuat duplikat.
+- UI `/pumk/target` → Set Target: cakupan **satu unit / semua unit / pilih unit**, isi cepat,
+  bagi rata dari total UID, tabel editable 17 baris, status `Baru/Diperbarui/Dilewati`,
+  opsi timpa. Halaman otomatis pindah ke tahun yang disimpan.
+- Uji API end-to-end **17/17 PASS**: create 17, overwrite 17, skip 17, sebagian 3 unit,
+  Paused→Active, validasi 401/400, dan target 2026 tidak tersentuh
+  (BINTARO 25/25/Rp500 jt + 1 No ID). Data uji tahun 2098/2099 sudah dihapus.
+- **Belum**: uji klik manual UI di browser (environment ini tidak punya browser otomasi).
+  Setelah merge, coba sekali mode Semua unit + Pilih unit di production.
 
 ## Bukti uji produksi 23 Okt (PUMK kunjungan)
 - Dokumen `pumk_visits/T9bqTNm0BjsUZk9NUl7W`, unit `uid`, status `draft`.
@@ -27,6 +43,7 @@
   ExecutionTimeLimit 3650 hari, `StartWhenAvailable`. Aksi `cmd.exe /c D:\media-store\run.cmd`.
 - `run.cmd` pakai `NODE_EXE` absolut (`C:\Program Files\nodejs\node.exe`) dari `config.env`; `cd /d %~dp0`.
 - Service `Tailscale` = Automatic; Funnel on → proxy `/` ke `127.0.0.1:8787`. Sleep AC dimatikan.
+- Status 26 Okt: `/health` ok, **6 file**, uptime ±4,4 hari (380.204 dtk), 434 GB bebas; Funnel aktif.
 - **Belum diuji reboot**: boot terakhir 20 Okt, task dipasang 22 Okt; service hidup sejak 22 Okt 09:28.
   `HiberbootEnabled=1` → "Restart" tetap boot penuh (aman); hanya "Shut down" + nyala yang bisa melewati
   trigger AtStartup. Verifikasi setelah restart: buka `/health` dari HP (data seluler) → `"ok": true`.
@@ -61,13 +78,14 @@
   daftar "Kegiatan tersimpan" + buka bukti bertoken.
 
 ## Sisa pekerjaan
-1. Buat PR → merge → deploy, lalu uji unggah 1 PDF + 1 gambar di 4 surface (draf konten, draf press release,
-   EVP, stakeholder realisasi).
-2. `stakeholder/review` masih MOCK → sambungkan ke API transisi yang ada.
-3. Halaman edit EVP agar eviden bisa diganti selama draf.
-4. Publish `firestore.rules` blok `pumk_targets` (Console); SMTP produksi; import cascading dari Sheet;
+1. Buat PR → merge `72177b9`, lalu uji klik UI target massal (Semua unit + Pilih unit) di production.
+2. Uji unggah 1 PDF + 1 gambar di 4 surface production (draf konten, draf press release, EVP,
+   stakeholder realisasi) — kode sudah live via PR #18/#19.
+3. `stakeholder/review` + `evaluasi` masih MOCK → sambungkan ke API transisi yang ada.
+4. Halaman edit EVP agar eviden bisa diganti selama draf.
+5. Publish `firestore.rules` blok `pumk_targets` (Console); SMTP produksi; import cascading dari Sheet;
    rekap agregat PUMK lintas unit.
-5. Keputusan tertunda: duplikat demo pakai data sama (A) atau Firebase project terpisah (B, rekomendasi);
+6. Keputusan tertunda: duplikat demo pakai data sama (A) atau Firebase project terpisah (B, rekomendasi);
    `NOTULENSI.md` restore atau hapus.
 
 ## Perintah & catatan
