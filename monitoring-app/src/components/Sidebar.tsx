@@ -76,6 +76,7 @@ const MENUS: MainMenu[] = [
     name: "Administrator",
     icon: "🛡️",
     children: [
+      { name: "Database PUMK", href: "/admin/pumk-database", icon: "🗄️", desc: "Master mitra, PKS & folder piutang", allowedRoles: ["admin_uid"] },
       { name: "Kelola Pengguna", href: "/admin/users", icon: "👥", desc: "NIP, role & status akun", superAdminOnly: true },
     ],
   },

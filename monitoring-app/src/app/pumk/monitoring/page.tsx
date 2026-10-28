@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import { useAuth } from "@/lib/authContext";
 import { useRouter } from "next/navigation";
 import type { PumkMitra, PumkKpi } from "@/lib/pumk";
-import { tlProgress, pumkSpsUrl } from "@/lib/pumk";
+import { tlProgress } from "@/lib/pumk";
 import PumkDetailModal from "@/components/PumkDetailModal";
 
 const rp = (n: number) =>
@@ -57,8 +57,6 @@ export default function PumkMonitoringPage() {
   const [fProg, setFProg] = useState("");
   const [fTO, setFTO] = useState("");
   const [selected, setSelected] = useState<PumkMitra | null>(null);
-  const [sheetId, setSheetId] = useState("");
-  const [sheetGid, setSheetGid] = useState("");
 
   async function loadData(refresh = false) {
     setLoading(true);
@@ -77,18 +75,16 @@ export default function PumkMonitoringPage() {
         if (res.status === 401) { router.replace("/login"); return; }
       }
       const text = await res.text();
-      let data: any = {};
+      let data: { error?: string; details?: string; mitra?: unknown; kpi?: unknown } = {};
       try { data = text ? JSON.parse(text) : {}; }
       catch { throw new Error(`API ${res.status}: respons bukan JSON.`); }
       if (!res.ok || data.error) {
         throw new Error(`API ${res.status}: ${data.error || data.details || text.slice(0, 200)}`);
       }
-      setMitra(Array.isArray(data.mitra) ? data.mitra : []);
-      setKpi(data.kpi || null);
-      if (data.meta?.sheetId) setSheetId(String(data.meta.sheetId));
-      if (data.meta?.gid) setSheetGid(String(data.meta.gid));
-    } catch (err: any) {
-      setError(err.message);
+      setMitra(Array.isArray(data.mitra) ? (data.mitra as PumkMitra[]) : []);
+      setKpi((data.kpi as PumkKpi) || null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
       setIsLoaded(true);
@@ -98,6 +94,7 @@ export default function PumkMonitoringPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.replace("/login"); return; }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user, getToken, router]);
@@ -119,7 +116,6 @@ export default function PumkMonitoringPage() {
   }, [mitra, q, fKol, fTL, fProg, fTO]);
 
   const filteredRp = filtered.reduce((s, m) => s + m.totalJul, 0);
-  const spsUrl = useMemo(() => pumkSpsUrl(sheetId || undefined, sheetGid || undefined), [sheetId, sheetGid]);
 
   const exportExcel = () => {
     if (filtered.length === 0) { alert("Tidak ada data untuk diekspor!"); return; }
@@ -281,7 +277,7 @@ export default function PumkMonitoringPage() {
                   filtered.map((m) => {
                     const prog = tlProgress(m);
                     return (
-                      <tr key={m.noId} onClick={() => setSelected(m)} title="Klik untuk detail + SPS Online"
+                      <tr key={m.noId} onClick={() => setSelected(m)} title="Klik untuk detail"
                         style={{ borderBottom: "1px solid var(--card-border)", cursor: "pointer" }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(14,165,233,0.06)")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
@@ -330,7 +326,7 @@ export default function PumkMonitoringPage() {
       </section>
 
       {selected && (
-        <PumkDetailModal mitra={selected} spsUrl={spsUrl} onClose={() => setSelected(null)} />
+        <PumkDetailModal mitra={selected} onClose={() => setSelected(null)} />
       )}
     </div>
   );

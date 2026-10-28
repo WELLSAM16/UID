@@ -23,11 +23,9 @@ function dash(v: string): string {
 
 export default function PumkDetailModal({
   mitra,
-  spsUrl,
   onClose,
 }: {
   mitra: PumkMitra;
-  spsUrl: string;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -84,15 +82,6 @@ export default function PumkDetailModal({
         </div>
 
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "18px" }}>
-          <a
-            href={spsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn"
-            style={{ background: "var(--primary)", color: "white", padding: "9px 16px", fontSize: "0.85rem", fontWeight: 700, textDecoration: "none" }}
-          >
-            📄 Buka SPS Online (tab UP3 Bintaro) ↗
-          </a>
           {mitra.lokasiUrl && (
             <a
               href={mitra.lokasiUrl}
@@ -107,9 +96,6 @@ export default function PumkDetailModal({
           <button className="btn" onClick={onClose} style={{ padding: "9px 16px", marginLeft: "auto" }}>
             Tutup
           </button>
-        </div>
-        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "10px" }}>
-          Folder evidensi per mitra ada di kolom A (“Buka Folder”) file SPS — buka SPS lalu klik Buka Folder pada baris {mitra.noId}.
         </div>
       </div>
     </div>
