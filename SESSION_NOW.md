@@ -3,17 +3,17 @@
 > Baca file ini saja saat membuka sesi baru. Detail historis: `SESSION_RESUME.md` (jangan dibaca penuh).
 
 ## Posisi sekarang
-- Branch `feat-draft-internal-storage` @ `9736300`, sudah di-push. `origin/master` @ `34f15fd`
+- Branch `feat-draft-internal-storage` @ `03089d6`, sudah di-push. `origin/master` @ `34f15fd`
   (merge PR #19; seluruh surface media sudah live).
-- **Dua commit belum di-merge**: `72177b9` (target massal) + `9736300` (banyak NO ID per unit).
-  Langkah user:
+- **Tiga commit belum di-merge**: `72177b9` (target massal) + `9736300` (banyak NO ID per unit) +
+  `03089d6` (Database PUMK internal). Langkah user:
   `https://github.com/WELLSAM16/UID/compare/master...feat-draft-internal-storage?expand=1`
-  judul saran: "PUMK: set target massal + input banyak mitra per unit".
+  judul saran: "PUMK: target massal, banyak mitra/unit, database internal".
 - Sudah live & terbukti di production: **PUMK kunjungan** (bukti uji 23 Okt di bawah) + seluruh
   surface media (draf konten, draf press release, EVP, stakeholder realisasi) via PR #18/#19.
-- `tsc --noEmit` EXIT 0, `eslint` file terkait EXIT 0, `next build` EXIT 0 (28 Okt).
-  Working tree: `M SESSION_RESUME.md`, `D NOTULENSI.md`, `?? monitoring-app/docs/` (jangan sentuh).
-  `gh` CLI tidak ada → cek PR via API.
+- `tsc --noEmit` EXIT 0, `eslint` file terkait EXIT 0 (hanya warning `<img>` lama di Sidebar),
+  `next build` EXIT 0 (28 Okt). Working tree: `M SESSION_RESUME.md`, `D NOTULENSI.md`,
+  `?? monitoring-app/docs/` (jangan sentuh). `gh` CLI tidak ada → cek PR via API.
 
 ## Sesi 26–28 Okt — target PUMK massal (`72177b9` + `9736300`)
 - Endpoint `POST /api/pumk-targets/bulk` (admin, satu transaksi Firestore, maks 17 unit):
@@ -31,6 +31,25 @@
   tidak dikirim, skip, tolak ID >120 karakter, 2026 utuh). Data uji 2097/2098/2099 sudah dihapus.
 - **Belum**: uji klik manual UI di browser (environment ini tidak punya browser otomasi).
   Setelah merge, coba sekali mode Semua unit + Pilih unit di production.
+
+## Sesi 28 Okt — Database PUMK internal (`03089d6`)
+- Submenu **Administrator → Database PUMK** (`/admin/pumk-database`), hanya admin_uid/administrator.
+  Admin UID sekarang melihat section Administrator walau Kelola Pengguna tetap super admin.
+- Koleksi Firestore baru `pumk_database`: **363 mitra** hasil impor awal dari tab
+  `FIX REKAP DATABASE MASTER`; **362 folder PKS/piutang** terisi, **266 unit** terisi,
+  **97 belum punya unit**. Dokumen menyimpan field mirip sheet (identitas, keuangan, penugasan,
+  status/validasi, lokasi) + `linkFolder` hasil ekstrak formula HYPERLINK.
+- API admin: `GET/POST /api/pumk/database`, `PATCH/DELETE /api/pumk/database/[id]`.
+  Validasi: NO ID unik (case-insensitive), nama wajib, angka >= 0, URL folder/maps valid,
+  unit dinormalisasi (`UP2D Jakarta` → `UP2D`), role unit ditolak 403.
+- UI: tabel + cari/filter unit/kolektibilitas/status + pagination + export Excel; form tambah/edit
+  lengkap; tombol buka folder PKS/piutang. Tidak ada tautan ke Google Sheet dari halaman ini.
+- Tautan **SPS Online/Google Sheet** di Monitoring PUMK + detail modal dihapus. Monitoring PUMK lama
+  masih membaca sheet di server; sumber database baru sudah internal (migrasi monitoring bisa menyusul).
+- Uji API **12/12 PASS**: 401 tanpa token, 403 role unit, 200 admin_uid, 363 mitra + folder sample,
+  normalisasi UP2D, create, duplikat 409, URL salah 400, patch, bentrok NO ID 409, GET terbaru,
+  delete + total kembali 363. Data uji dibersihkan.
+- **Belum**: uji klik UI di browser dan uji input folder manual oleh user.
 
 ## Bukti uji produksi 23 Okt (PUMK kunjungan)
 - Dokumen `pumk_visits/T9bqTNm0BjsUZk9NUl7W`, unit `uid`, status `draft`.
@@ -82,14 +101,14 @@
   daftar "Kegiatan tersimpan" + buka bukti bertoken.
 
 ## Sisa pekerjaan
-1. Buat PR → merge `72177b9` + `9736300`, lalu uji klik UI target massal (banyak NO ID per unit,
-   Semua unit + Pilih unit) di production.
+1. Buat PR → merge `72177b9` + `9736300` + `03089d6`, lalu uji klik UI target massal (banyak NO ID
+   per unit, Semua unit + Pilih unit) dan Database PUMK di production.
 2. Uji unggah 1 PDF + 1 gambar di 4 surface production (draf konten, draf press release, EVP,
    stakeholder realisasi) — kode sudah live via PR #18/#19.
 3. `stakeholder/review` + `evaluasi` masih MOCK → sambungkan ke API transisi yang ada.
 4. Halaman edit EVP agar eviden bisa diganti selama draf.
-5. Publish `firestore.rules` blok `pumk_targets` (Console); SMTP produksi; import cascading dari Sheet;
-   rekap agregat PUMK lintas unit.
+5. Publish `firestore.rules` blok `pumk_targets` + `pumk_database` (Console); SMTP produksi; migrasi
+   Monitoring PUMK lama agar membaca `pumk_database` (bukan sheet); rekap agregat PUMK lintas unit.
 6. Keputusan tertunda: duplikat demo pakai data sama (A) atau Firebase project terpisah (B, rekomendasi);
    `NOTULENSI.md` restore atau hapus.
 
