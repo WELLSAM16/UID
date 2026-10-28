@@ -3,17 +3,17 @@
 > Baca file ini saja saat membuka sesi baru. Detail historis: `SESSION_RESUME.md` (jangan dibaca penuh).
 
 ## Posisi sekarang
-- Branch `feat-draft-internal-storage` @ `03089d6`, sudah di-push. `origin/master` @ `34f15fd`
+- Branch `feat-draft-internal-storage` @ `08a0319`, sudah di-push. `origin/master` @ `34f15fd`
   (merge PR #19; seluruh surface media sudah live).
-- **Tiga commit belum di-merge**: `72177b9` (target massal) + `9736300` (banyak NO ID per unit) +
-  `03089d6` (Database PUMK internal). Langkah user:
+- **Empat commit belum di-merge**: `72177b9` (target massal) + `9736300` (banyak NO ID per unit) +
+  `03089d6` (Database PUMK internal) + `08a0319` (menu Database PUMK pindah ke dropdown PUMK). Langkah user:
   `https://github.com/WELLSAM16/UID/compare/master...feat-draft-internal-storage?expand=1`
   judul saran: "PUMK: target massal, banyak mitra/unit, database internal".
 - Sudah live & terbukti di production: **PUMK kunjungan** (bukti uji 23 Okt di bawah) + seluruh
   surface media (draf konten, draf press release, EVP, stakeholder realisasi) via PR #18/#19.
 - `tsc --noEmit` EXIT 0, `eslint` file terkait EXIT 0 (hanya warning `<img>` lama di Sidebar),
-  `next build` EXIT 0 (28 Okt). Working tree: `M SESSION_RESUME.md`, `D NOTULENSI.md`,
-  `?? monitoring-app/docs/` (jangan sentuh). `gh` CLI tidak ada → cek PR via API.
+  `next build` EXIT 0 (28 Okt, termasuk setelah `08a0319`). Working tree: `M SESSION_RESUME.md`,
+  `D NOTULENSI.md`, `?? monitoring-app/docs/` (jangan sentuh). `gh` CLI tidak ada → cek PR via API.
 
 ## Sesi 26–28 Okt — target PUMK massal (`72177b9` + `9736300`)
 - Endpoint `POST /api/pumk-targets/bulk` (admin, satu transaksi Firestore, maks 17 unit):
@@ -33,8 +33,15 @@
   Setelah merge, coba sekali mode Semua unit + Pilih unit di production.
 
 ## Sesi 28 Okt — Database PUMK internal (`03089d6`)
-- Submenu **Administrator → Database PUMK** (`/admin/pumk-database`), hanya admin_uid/administrator.
-  Admin UID sekarang melihat section Administrator walau Kelola Pengguna tetap super admin.
+- Submenu **PUMK → Database PUMK** (`/admin/pumk-database`, ikon 🗄️), hanya admin_uid + super admin.
+  Awalnya ditaruh di section Administrator, lalu dipindah ke dropdown PUMK pada `08a0319` karena user
+  tidak menemukannya. Filter sidebar `allowedRoles: ["admin_uid"]`; administrator/admin selalu lolos,
+  jadi staff/TL/asman tidak melihat menunya. Section Administrator kini hanya Kelola Pengguna.
+- Akses langsung tetap terkunci: halaman di bawah layout admin (`ProtectedRoute requireAdmin`) dan semua
+  API `pumk/database` memakai `requireAdmin` server-side → role unit ditolak 403 walau tahu URL.
+  Halaman sengaja tetap di `/admin/pumk-database` agar guard admin tidak hilang.
+- Catatan production: `origin/master` belum punya `admin/pumk-database` maupun `api/pumk/database`,
+  jadi menu hanya ada di build branch. Setelah merge + deploy, buka **PUMK → Database PUMK**.
 - Koleksi Firestore baru `pumk_database`: **363 mitra** hasil impor awal dari tab
   `FIX REKAP DATABASE MASTER`; **362 folder PKS/piutang** terisi, **266 unit** terisi,
   **97 belum punya unit**. Dokumen menyimpan field mirip sheet (identitas, keuangan, penugasan,
@@ -101,8 +108,9 @@
   daftar "Kegiatan tersimpan" + buka bukti bertoken.
 
 ## Sisa pekerjaan
-1. Buat PR → merge `72177b9` + `9736300` + `03089d6`, lalu uji klik UI target massal (banyak NO ID
-   per unit, Semua unit + Pilih unit) dan Database PUMK di production.
+1. Buat PR → merge `72177b9` + `9736300` + `03089d6` + `08a0319`, lalu uji klik UI target massal
+   (banyak NO ID per unit, Semua unit + Pilih unit) dan Database PUMK di production; pastikan menu
+   **PUMK → Database PUMK** hanya tampil untuk Admin UID/super admin.
 2. Uji unggah 1 PDF + 1 gambar di 4 surface production (draf konten, draf press release, EVP,
    stakeholder realisasi) — kode sudah live via PR #18/#19.
 3. `stakeholder/review` + `evaluasi` masih MOCK → sambungkan ke API transisi yang ada.
