@@ -59,6 +59,7 @@ const MENUS: MainMenu[] = [
       { name: "Monitoring PUMK", href: "/pumk/monitoring", icon: "📉", desc: "Tunggakan UP3 Bintaro dari database UID" },
       { name: "Target PUMK", href: "/pumk/target", icon: "🎯", desc: "Set target + pantau capaian per unit" },
       { name: "Laporan Kunjungan", href: "/pumk/kunjungan", icon: "📝", desc: "Pengganti g-form laporan UMK" },
+      { name: "Database PUMK", href: "/admin/pumk-database", icon: "🗄️", desc: "Master mitra, PKS & folder piutang", allowedRoles: ["admin_uid"] },
     ],
   },
   {
@@ -76,7 +77,6 @@ const MENUS: MainMenu[] = [
     name: "Administrator",
     icon: "🛡️",
     children: [
-      { name: "Database PUMK", href: "/admin/pumk-database", icon: "🗄️", desc: "Master mitra, PKS & folder piutang", allowedRoles: ["admin_uid"] },
       { name: "Kelola Pengguna", href: "/admin/users", icon: "👥", desc: "NIP, role & status akun", superAdminOnly: true },
     ],
   },
