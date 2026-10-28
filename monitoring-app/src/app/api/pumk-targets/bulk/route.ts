@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { requireAdmin } from "@/lib/authServer";
 import { normalizeUnitId } from "@/lib/roles";
-import { PUMK_TARGET_UNITS, validatePumkTarget } from "@/lib/pumkTarget";
+import {
+  PUMK_TARGET_UNITS,
+  normalizeAssignedNoIds,
+  validatePumkTarget,
+} from "@/lib/pumkTarget";
 
 const COLLECTION = "pumk_targets";
 
@@ -36,6 +40,8 @@ interface BulkItem {
   targetMitra: number;
   targetInventarisasi: number;
   targetRupiahKembali: number;
+  /** Bila undefined, daftar NO ID lama dipertahankan. */
+  assignedNoIds?: string[];
 }
 
 type PlanAction = "created" | "updated" | "skipped";
@@ -50,7 +56,8 @@ interface PlanItem {
  * POST /api/pumk-targets/bulk — admin only.
  * Body: {
  *   tahun: "2026",
- *   items: [{ unitId, targetMitra, targetInventarisasi, targetRupiahKembali }],
+ *   items: [{ unitId, targetMitra, targetInventarisasi, targetRupiahKembali,
+ *             assignedNoIds? }],
  *   overwrite?: boolean  // default true
  * }
  *
@@ -58,10 +65,12 @@ interface PlanItem {
  * Aturan:
  * - unit harus UP2D/UP3 (UID tidak boleh).
  * - maksimal 17 unit, tidak boleh duplikat.
+ * - `assignedNoIds` boleh berisi banyak NO ID per unit (array/string).
  * - bila sudah ada baris untuk unit+tahun: perbarui baris aktif (atau baris
- *   pertama) menjadi Active; `assignedNoIds` dan `createdAt` dipertahankan.
+ *   pertama) menjadi Active; `createdAt` dipertahankan. `assignedNoIds` diganti
+ *   bila field itu dikirim, atau dipertahankan bila tidak dikirim.
  * - bila overwrite=false: unit yang sudah punya baris dilewati.
- * - bila belum ada baris: buat baru dengan assignedNoIds kosong.
+ * - bila belum ada baris: buat baru dengan assignedNoIds kosong bila tidak dikirim.
  */
 export async function POST(request: NextRequest) {
   const { response, user } = await requireAdmin(request);
@@ -117,19 +126,23 @@ export async function POST(request: NextRequest) {
       targetMitra: raw.targetMitra,
       targetInventarisasi: raw.targetInventarisasi,
       targetRupiahKembali: raw.targetRupiahKembali,
-      assignedNoIds: [],
+      assignedNoIds: raw.assignedNoIds,
       status: "Active",
     });
     if (!v.ok) {
       return NextResponse.json({ error: `${unitId}: ${v.error}` }, { status: 400 });
     }
 
-    items.push({
+    const item: BulkItem = {
       unitId,
       targetMitra: Number(raw.targetMitra),
       targetInventarisasi: Number(raw.targetInventarisasi),
       targetRupiahKembali: Number(raw.targetRupiahKembali),
-    });
+    };
+    if (raw.assignedNoIds !== undefined) {
+      item.assignedNoIds = normalizeAssignedNoIds(raw.assignedNoIds);
+    }
+    items.push(item);
   }
 
   const overwrite = body.overwrite !== false;
@@ -172,6 +185,9 @@ export async function POST(request: NextRequest) {
               targetMitra: it.targetMitra,
               targetInventarisasi: it.targetInventarisasi,
               targetRupiahKembali: it.targetRupiahKembali,
+              ...(it.assignedNoIds !== undefined
+                ? { assignedNoIds: it.assignedNoIds }
+                : {}),
               status: "Active",
               updatedAt: now,
               updatedBy: u.uid,
@@ -188,7 +204,7 @@ export async function POST(request: NextRequest) {
             targetMitra: it.targetMitra,
             targetInventarisasi: it.targetInventarisasi,
             targetRupiahKembali: it.targetRupiahKembali,
-            assignedNoIds: [],
+            assignedNoIds: it.assignedNoIds ?? [],
             status: "Active",
             createdBy: u.uid,
             createdByEmail: u.email || null,

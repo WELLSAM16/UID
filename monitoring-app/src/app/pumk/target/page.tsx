@@ -35,6 +35,7 @@ interface BulkRow {
   targetMitra: string;
   targetInventarisasi: string;
   targetRupiahKembali: string;
+  assignedNoIds: string;
 }
 
 function emptyBulkRow(unitId: string): BulkRow {
@@ -43,8 +44,12 @@ function emptyBulkRow(unitId: string): BulkRow {
     targetMitra: "",
     targetInventarisasi: "",
     targetRupiahKembali: "",
+    assignedNoIds: "",
   };
 }
+
+const assignedCount = (s: string) =>
+  s.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean).length;
 
 const EMPTY = {
   unitId: "UP3 BINTARO",
@@ -100,8 +105,7 @@ export default function PumkTargetPage() {
   const [pickedUnits, setPickedUnits] = useState<string[]>([...PUMK_TARGET_UNITS]);
   const [bulkRows, setBulkRows] = useState<BulkRow[]>([]);
   const [bulkOverwrite, setBulkOverwrite] = useState(true);
-  const [quick, setQuick] = useState({ mitra: "", inventarisasi: "", rupiah: "" });
-  const [split, setSplit] = useState({ mitra: "", inventarisasi: "", rupiah: "" });
+  const [quick, setQuick] = useState({ inventarisasi: "", rupiah: "" });
   const [existingYear, setExistingYear] = useState<{ tahun: string; targets: PumkTarget[] }>({
     tahun: "",
     targets: [],
@@ -242,8 +246,7 @@ export default function PumkTargetPage() {
       setScope("single");
       setPickedUnits([...PUMK_TARGET_UNITS]);
       setBulkRows([]);
-      setQuick({ mitra: "", inventarisasi: "", rupiah: "" });
-      setSplit({ mitra: "", inventarisasi: "", rupiah: "" });
+      setQuick({ inventarisasi: "", rupiah: "" });
       setBulkOverwrite(true);
       setExistingYear({ tahun: "", targets: [] });
     }
@@ -289,62 +292,42 @@ export default function PumkTargetPage() {
   };
 
   const applyQuickToAll = () => {
-    if (!quick.mitra.trim() || !quick.inventarisasi.trim() || !quick.rupiah.trim()) {
-      alert("Isi ketiga nilai cepat dulu (mitra, inventarisasi, rupiah).");
+    if (!quick.inventarisasi.trim() || !quick.rupiah.trim()) {
+      alert("Isi nilai cepat inventarisasi dan rupiah dulu.");
       return;
     }
     setBulkRows((prev) =>
       prev.map((r) => ({
         ...r,
-        targetMitra: quick.mitra,
         targetInventarisasi: quick.inventarisasi,
         targetRupiahKembali: quick.rupiah,
       }))
     );
   };
 
-  const applySplitFromTotal = () => {
-    const units = bulkUnits;
-    if (!units.length) {
-      alert("Pilih unit dulu.");
-      return;
-    }
-    const totalMitra = Number(split.mitra);
-    const totalInv = Number(split.inventarisasi);
-    const totalRupiah = Number(split.rupiah);
-    if (
-      !Number.isFinite(totalMitra) || totalMitra < 0 ||
-      !Number.isFinite(totalInv) || totalInv < 0 ||
-      !Number.isFinite(totalRupiah) || totalRupiah < 0
-    ) {
-      alert("Total UID harus angka >= 0.");
-      return;
-    }
-    const share = (total: number) => {
-      const base = Math.floor(total / units.length);
-      const rest = Math.floor(total) - base * units.length;
-      return units.map((_, i) => base + (i < rest ? 1 : 0));
-    };
-    const mitra = share(Math.trunc(totalMitra));
-    const inv = share(Math.trunc(totalInv));
-    const rupiah = share(Math.trunc(totalRupiah));
-    setBulkRows(
-      units.map((u, i) => ({
-        unitId: u,
-        targetMitra: String(mitra[i]),
-        targetInventarisasi: String(inv[i]),
-        targetRupiahKembali: String(rupiah[i]),
-      }))
-    );
-  };
-
   const updateBulkRow = (
     unitId: string,
-    field: "targetMitra" | "targetInventarisasi" | "targetRupiahKembali",
+    field:
+      | "targetMitra"
+      | "targetInventarisasi"
+      | "targetRupiahKembali"
+      | "assignedNoIds",
     value: string
   ) => {
     setBulkRows((prev) =>
-      prev.map((r) => (r.unitId === unitId ? { ...r, [field]: value } : r))
+      prev.map((r) => {
+        if (r.unitId !== unitId) return r;
+        if (field !== "assignedNoIds") return { ...r, [field]: value };
+
+        // Saat daftar NO ID ditempel, target mitra otomatis mengikuti
+        // jumlahnya selama belum diubah manual.
+        const oldCount = assignedCount(r.assignedNoIds);
+        const next = { ...r, assignedNoIds: value };
+        if (!r.targetMitra.trim() || Number(r.targetMitra) === oldCount) {
+          next.targetMitra = String(assignedCount(value));
+        }
+        return next;
+      })
     );
   };
 
@@ -366,13 +349,23 @@ export default function PumkTargetPage() {
         targetMitra: number;
         targetInventarisasi: number;
         targetRupiahKembali: number;
+        assignedNoIds?: string;
       }> = [];
       for (const r of bulkRows) {
-        if (!r.targetMitra.trim() || !r.targetInventarisasi.trim() || !r.targetRupiahKembali.trim()) {
-          alert(`Lengkapi target ${formatUnitDisplay(r.unitId)}.`);
+        const idsCount = assignedCount(r.assignedNoIds);
+        if (!r.targetInventarisasi.trim() || !r.targetRupiahKembali.trim()) {
+          alert(
+            `Lengkapi target inventarisasi dan rupiah untuk ${formatUnitDisplay(r.unitId)}.`
+          );
           return;
         }
-        const mitra = Number(r.targetMitra);
+        if (!r.targetMitra.trim() && idsCount === 0) {
+          alert(
+            `Isi daftar NO ID mitra atau target mitra untuk ${formatUnitDisplay(r.unitId)}.`
+          );
+          return;
+        }
+        const mitra = r.targetMitra.trim() ? Number(r.targetMitra) : idsCount;
         const inv = Number(r.targetInventarisasi);
         const rupiah = Number(r.targetRupiahKembali);
         if (
@@ -390,6 +383,8 @@ export default function PumkTargetPage() {
           targetMitra: mitra,
           targetInventarisasi: inv,
           targetRupiahKembali: rupiah,
+          // Kolom kosong = pertahankan daftar lama (bila ada).
+          ...(r.assignedNoIds.trim() ? { assignedNoIds: r.assignedNoIds } : {}),
         });
       }
       setSaving(true);
@@ -479,17 +474,15 @@ export default function PumkTargetPage() {
     }
   };
 
-  const assignedCount = (s: string) =>
-    s.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean).length;
-
   return (
     <div style={{ maxWidth: "1300px", margin: "0 auto" }}>
       <header className="responsive-header">
         <div>
           <h1 style={{ fontSize: "2.2rem", margin: 0, color: "#111" }}>Target PUMK per Unit</h1>
           <p style={{ margin: "5px 0 0 0", color: "#111", fontSize: "0.9rem" }}>
-            Admin UID menetapkan target inventarisasi, rupiah kembali, dan mitra yang ditangani tiap UP3/UP2D.
-            Capaian dihitung dari kunjungan <b>approved</b> tahun berjalan.
+            Admin UID membagi mitra ke tiap UP3/UP2D: isi daftar NO ID mitra yang menjadi tanggung jawab
+            unit tersebut, lalu target inventarisasi dan rupiahnya. Capaian dihitung dari kunjungan
+            <b> approved</b> tahun berjalan.
           </p>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
@@ -645,7 +638,7 @@ export default function PumkTargetPage() {
             style={{
               padding: "30px",
               width: "100%",
-              maxWidth: !editTarget && scope !== "single" ? "980px" : "560px",
+              maxWidth: !editTarget && scope !== "single" ? "1120px" : "560px",
               maxHeight: "92vh",
               overflowY: "auto",
             }}
@@ -836,6 +829,8 @@ export default function PumkTargetPage() {
                       {bulkUnits.length} unit dipilih
                       {bulkUnits.length > 0 && ` · ${bulkRows.length} baris siap diisi`}
                       {" · "}
+                      {bulkRows.reduce((n, r) => n + assignedCount(r.assignedNoIds), 0)} NO ID
+                      {" · "}
                       target lama yang ditemukan:{" "}
                       {existingYear.tahun === formData.tahun.trim() ? existingYear.targets.length : 0}
                     </div>
@@ -849,16 +844,11 @@ export default function PumkTargetPage() {
                       marginBottom: "16px",
                     }}
                   >
-                    <b style={{ fontSize: "0.9rem" }}>Isi cepat (berlaku untuk semua baris)</b>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "8px", marginTop: "8px" }}>
-                      <input
-                        type="number"
-                        min={0}
-                        className="input-field"
-                        placeholder="Target mitra"
-                        value={quick.mitra}
-                        onChange={(e) => setQuick({ ...quick, mitra: e.target.value })}
-                      />
+                    <b style={{ fontSize: "0.9rem" }}>Isi cepat inventarisasi & rupiah</b>
+                    <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                      {" "}— opsional, tidak mengubah daftar mitra.
+                    </span>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px", marginTop: "8px" }}>
                       <input
                         type="number"
                         min={0}
@@ -884,51 +874,13 @@ export default function PumkTargetPage() {
                     >
                       Terapkan ke semua baris
                     </button>
-
-                    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid rgba(0,0,0,0.08)" }}>
-                      <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Bagi rata dari total UID</span>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "8px", marginTop: "8px" }}>
-                        <input
-                          type="number"
-                          min={0}
-                          className="input-field"
-                          placeholder="Total mitra"
-                          value={split.mitra}
-                          onChange={(e) => setSplit({ ...split, mitra: e.target.value })}
-                        />
-                        <input
-                          type="number"
-                          min={0}
-                          className="input-field"
-                          placeholder="Total inventarisasi"
-                          value={split.inventarisasi}
-                          onChange={(e) => setSplit({ ...split, inventarisasi: e.target.value })}
-                        />
-                        <input
-                          type="number"
-                          min={0}
-                          className="input-field"
-                          placeholder="Total rupiah"
-                          value={split.rupiah}
-                          onChange={(e) => setSplit({ ...split, rupiah: e.target.value })}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{ marginTop: "8px", padding: "6px 12px", fontSize: "0.82rem", background: "rgba(16,185,129,0.15)", color: "#047857" }}
-                        onClick={applySplitFromTotal}
-                      >
-                        Bagi rata ke {bulkUnits.length} unit
-                      </button>
-                    </div>
                   </div>
 
                   <div
                     style={{
                       border: "1px solid rgba(0,0,0,0.12)",
                       borderRadius: "10px",
-                      maxHeight: "320px",
+                      maxHeight: "420px",
                       overflow: "auto",
                       marginBottom: "12px",
                     }}
@@ -937,6 +889,9 @@ export default function PumkTargetPage() {
                       <thead>
                         <tr>
                           <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Unit</th>
+                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
+                            Daftar NO ID Mitra
+                          </th>
                           <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Mitra</th>
                           <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Inventarisasi</th>
                           <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Rupiah</th>
@@ -946,7 +901,7 @@ export default function PumkTargetPage() {
                       <tbody>
                         {bulkRows.length === 0 ? (
                           <tr>
-                            <td colSpan={5} style={{ textAlign: "center" }}>
+                            <td colSpan={6} style={{ textAlign: "center" }}>
                               Belum ada unit dipilih.
                             </td>
                           </tr>
@@ -963,11 +918,24 @@ export default function PumkTargetPage() {
                               <tr key={r.unitId}>
                                 <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{formatUnitDisplay(r.unitId)}</td>
                                 <td>
+                                  <textarea
+                                    rows={2}
+                                    className="input-field"
+                                    style={{ width: "230px", minWidth: "210px", fontSize: "0.8rem", resize: "vertical" }}
+                                    placeholder={"Satu NO ID per baris / pisah koma\ncth: 01-01-778/93"}
+                                    value={r.assignedNoIds}
+                                    onChange={(e) => updateBulkRow(r.unitId, "assignedNoIds", e.target.value)}
+                                  />
+                                  <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    {assignedCount(r.assignedNoIds)} NO ID
+                                  </div>
+                                </td>
+                                <td>
                                   <input
                                     type="number"
                                     min={0}
                                     className="input-field"
-                                    style={{ width: "100px", textAlign: "right" }}
+                                    style={{ width: "90px", textAlign: "right" }}
                                     value={r.targetMitra}
                                     onChange={(e) => updateBulkRow(r.unitId, "targetMitra", e.target.value)}
                                   />
@@ -1008,7 +976,10 @@ export default function PumkTargetPage() {
                     Perbarui target yang sudah ada (jika tidak dicentang, unit yang sudah punya target dilewati)
                   </label>
                   <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: 0, marginBottom: "20px" }}>
-                    Daftar NO ID mitra tidak diubah oleh set massal; atur per unit lewat tombol Edit.
+                    Tempel banyak NO ID mitra per unit (satu per baris atau pisahkan koma). Target mitra otomatis
+                    mengikuti jumlah NO ID selama belum diubah manual. Kolom kosong mempertahankan daftar lama;
+                    untuk menghapus daftar, edit unit tersebut. Tidak ada pembagian rata: setiap unit memegang
+                    mitra yang diinput untuk unit itu.
                   </p>
                 </>
               )}
