@@ -88,6 +88,13 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     if (doc.status !== "draft" && doc.status !== "rejected") {
       return NextResponse.json({ error: "Hanya draf atau laporan ditolak yang bisa diajukan" }, { status: 409 });
     }
+    // Jangan biarkan laporan diajukan tanpa foto bukti kunjungan ke mitra.
+    if (!doc.evidencePath) {
+      return NextResponse.json(
+        { error: "Unggah foto bukti kunjungan sebelum mengajukan laporan." },
+        { status: 409 }
+      );
+    }
     // Jangan biarkan laporan Penagihan diajukan tanpa bukti bayar.
     if (String(doc.jenisTindakLanjut || "") === "Penagihan" && !doc.buktiBayarPath && !doc.buktiBayarUrl) {
       return NextResponse.json(
@@ -144,6 +151,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       buktiBayarUrl: body.buktiBayarUrl ?? doc.buktiBayarUrl,
       formOPath: body.formOPath ?? doc.formOPath,
       dokumenLainPath: body.dokumenLainPath ?? doc.dokumenLainPath,
+      evidencePath: body.evidencePath ?? doc.evidencePath,
       buktiBayarPath: body.buktiBayarPath ?? doc.buktiBayarPath,
     });
     if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
@@ -164,6 +172,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   const menyentuhFile =
     body.formOPath !== undefined ||
     body.dokumenLainPath !== undefined ||
+    body.evidencePath !== undefined ||
     body.buktiBayarPath !== undefined;
   if (menyentuhFile && doc.status !== "draft" && doc.status !== "rejected") {
     return NextResponse.json(
@@ -171,14 +180,14 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       { status: 409 }
     );
   }
-  for (const key of ["formOPath", "dokumenLainPath", "buktiBayarPath"] as const) {
+  for (const key of ["formOPath", "dokumenLainPath", "evidencePath", "buktiBayarPath"] as const) {
     if (body[key] === undefined) continue;
     if (!isStoragePathOrEmpty(body[key])) {
       return NextResponse.json({ error: `${key} tidak valid` }, { status: 400 });
     }
     patch[key] = s(body[key]) || null;
   }
-  for (const key of ["formOName", "dokumenLainName", "buktiBayarName"] as const) {
+  for (const key of ["formOName", "dokumenLainName", "evidenceName", "buktiBayarName"] as const) {
     if (body[key] === undefined) continue;
     patch[key] = s(body[key]).slice(0, 120) || null;
   }

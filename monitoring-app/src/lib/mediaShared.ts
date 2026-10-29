@@ -66,9 +66,13 @@ export function validateMediaFile(
   const maxBytes = limits?.maxBytes ?? MEDIA_MAX_BYTES;
   if (!file) return "File belum dipilih";
   if (!allowed.includes(file.type)) {
-    return allowed.includes("video/mp4")
-      ? "File harus gambar (JPG/PNG/WebP) atau video (MP4/MOV)"
-      : "File harus PDF atau gambar (JPG/PNG/WebP)";
+    if (allowed.includes("video/mp4")) {
+      return "File harus gambar (JPG/PNG/WebP) atau video (MP4/MOV)";
+    }
+    if (allowed.includes("application/pdf")) {
+      return "File harus PDF atau gambar (JPG/PNG/WebP)";
+    }
+    return "File harus gambar (JPG/PNG/WebP)";
   }
   if (file.size <= 0) return "File kosong";
   if (file.size > maxBytes) {

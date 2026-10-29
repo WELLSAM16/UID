@@ -3,18 +3,18 @@
 > Baca file ini saja saat membuka sesi baru. Detail historis: `SESSION_RESUME.md` (jangan dibaca penuh).
 
 ## Posisi sekarang
-- Branch `feat-draft-internal-storage` @ `6befdcc`, sudah di-push. `origin/master` @ `34f15fd`
+- Branch `feat-draft-internal-storage` @ `60b2845`, sudah di-push. `origin/master` @ `34f15fd`
   (merge PR #19; seluruh surface media sudah live).
-- **Tujuh commit belum di-merge**: `72177b9` (target massal) + `9736300` (banyak NO ID per unit) +
+- **Delapan commit belum di-merge**: `72177b9` (target massal) + `9736300` (banyak NO ID per unit) +
   `03089d6` (Database PUMK internal) + `08a0319` (menu Database PUMK pindah ke dropdown PUMK) +
   `4e2eca5` (alur persetujuan kunjungan) + `1be99a2` (sync semua role) +
-  `6befdcc` (peta rencana postingan UP). Langkah user:
+  `6befdcc` (peta rencana postingan UP) + `60b2845` (foto evidence kunjungan mitra). Langkah user:
   `https://github.com/WELLSAM16/UID/compare/master...feat-draft-internal-storage?expand=1`
   judul saran: "PUMK: target massal, banyak mitra/unit, database internal".
 - Sudah live & terbukti di production: **PUMK kunjungan** (bukti uji 23 Okt di bawah) + seluruh
   surface media (draf konten, draf press release, EVP, stakeholder realisasi) via PR #18/#19.
 - `tsc --noEmit` EXIT 0, `eslint` file terkait EXIT 0 (hanya warning `<img>` lama di Sidebar),
-  `next build` EXIT 0 (29 Okt, termasuk setelah `6befdcc`). Working tree: `M SESSION_RESUME.md`,
+  `next build` EXIT 0 (29 Okt, termasuk setelah `60b2845`). Working tree: `M SESSION_RESUME.md`,
   `D NOTULENSI.md`, `?? monitoring-app/docs/` (jangan sentuh). `gh` CLI tidak ada → cek PR via API.
 
 ## Sesi 26–28 Okt — target PUMK massal (`72177b9` + `9736300`)
@@ -99,6 +99,19 @@
 - **Belum**: deploy, lalu uji klik/upload media di browser production. Upload browser hanya bisa dari
   origin `https://uid-navy.vercel.app` (production), jadi uji setelah merge/deploy.
 
+## Sesi 29 Okt - foto evidence kunjungan mitra (`60b2845`)
+- Field baru di form Laporan Kunjungan PUMK: **Foto bukti kunjungan** (`evidencePath`/`evidenceName`),
+  input gambar JPG/PNG/WebP (bukan PDF), tersimpan di PC folder `pumk-visits/.../evidence`.
+- Foto boleh menyusul saat draf, tetapi **wajib ada sebelum "Ajukan ke Asman"**: tombol ajukan
+  menampilkan pesan, API `submit` mengembalikan 409 bila `evidencePath` kosong.
+- Foto bisa dilampirkan lewat modal **Lampirkan file** (draf/ditolak); tombol **Foto kunjungan**
+  muncul di daftar laporan dan membuka file bertoken.
+- Aturan media per-field: `MediaFieldRule.allowedMime`; `upload-url` memakai override field sebelum
+  override koleksi. PDF untuk evidence ditolak 400; gambar tetap 10 MB.
+- Uji API **10/10 PASS**: TL buat draf, ajukan tanpa foto 409, PDF evidence 400, upload gambar,
+  simpan path/name, tampil di daftar, ajukan 200 pending, unduh foto byte utuh, hapus admin. Data uji
+  dibersihkan. `tsc` + `next build` lolos.
+
 ## Bukti uji produksi 23 Okt (PUMK kunjungan)
 - Dokumen `pumk_visits/T9bqTNm0BjsUZk9NUl7W`, unit `uid`, status `draft`.
 - `formOPath` 283.407 B (`%PDF-1.7`), `buktiBayarPath` 675.998 B (`%PDF-1.4`); keduanya `%%EOF` valid.
@@ -149,7 +162,7 @@
   daftar "Kegiatan tersimpan" + buka bukti bertoken.
 
 ## Sisa pekerjaan
-1. Buat PR → merge `72177b9` + `9736300` + `03089d6` + `08a0319` + `4e2eca5` + `1be99a2` + `6befdcc`,
+1. Buat PR → merge `72177b9` + `9736300` + `03089d6` + `08a0319` + `4e2eca5` + `1be99a2` + `6befdcc` + `60b2845`,
    lalu uji klik UI target massal (banyak NO ID per unit, Semua unit + Pilih unit) dan Database PUMK di
    production; pastikan menu **PUMK → Database PUMK** hanya tampil untuk Admin UID/super admin.
 2. Setelah merge/deploy: uji **Medsos → Rencana Postingan UP** dengan akun UID (tambah rencana +

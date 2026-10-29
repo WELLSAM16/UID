@@ -14,6 +14,8 @@ export interface MediaFieldRule {
   folder: string;
   /** Label untuk pesan error. */
   label: string;
+  /** Override tipe file khusus field ini (mis. foto evidence hanya gambar). */
+  allowedMime?: readonly string[];
 }
 
 export interface MediaCollectionRule {
@@ -64,6 +66,11 @@ export const MEDIA_COLLECTIONS: Record<string, MediaCollectionRule> = {
       formOPath: { folder: "form-o", label: "Form O" },
       dokumenLainPath: { folder: "dokumen-lain", label: "Dokumen lain" },
       buktiBayarPath: { folder: "bukti-bayar", label: "Bukti pembayaran" },
+      evidencePath: {
+        folder: "evidence",
+        label: "Foto bukti kunjungan",
+        allowedMime: ["image/jpeg", "image/png", "image/webp"],
+      },
     },
     canWrite: (doc, user) => ownerEditable(doc, user, ["draft"]),
     canRead: ownerUnitOrAdmin,
