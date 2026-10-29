@@ -35,11 +35,12 @@ interface Visit {
   buktiBayarName?: string | null;
   status: string;
   authorUid: string;
+  reviewNote?: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Draf",
-  pending: "Menunggu review",
+  pending: "Menunggu Asman",
   approved: "Disetujui",
   rejected: "Ditolak",
 };
@@ -131,6 +132,20 @@ export default function PumkKunjunganPage() {
   const [atDokLain, setAtDokLain] = useState<File | null>(null);
   const [atBukti, setAtBukti] = useState<File | null>(null);
   const [attaching, setAttaching] = useState(false);
+
+  // Edit laporan (TL se-unit / admin) — data teks, file tetap lewat "Lampirkan file".
+  const [editFor, setEditFor] = useState<Visit | null>(null);
+  const [eTanggal, setETanggal] = useState("");
+  const [eNoId, setENoId] = useState("");
+  const [eNamaMitra, setENamaMitra] = useState("");
+  const [eKolektibilitas, setEKolektibilitas] = useState("Masalah");
+  const [eSaldoPokok, setESaldoPokok] = useState("");
+  const [eSaldoJasa, setESaldoJasa] = useState("");
+  const [eTotalSaldo, setETotalSaldo] = useState("");
+  const [eJenis, setEJenis] = useState("Inventarisasi");
+  const [eLokasiUrl, setELokasiUrl] = useState("");
+  const [eKondisiMitra, setEKondisiMitra] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const isAdmin = user?.role === "administrator" || user?.role === "admin_uid" || (user?.role as string) === "admin";
   const isSuperAdmin = user?.role === "administrator" || (user?.role as string) === "admin";
@@ -297,6 +312,10 @@ export default function PumkKunjunganPage() {
       setAttachFor(v);
       return;
     }
+    if (action === "edit") {
+      openEdit(v);
+      return;
+    }
     let note: string | undefined;
     if (action === "reject") {
       const n = prompt(`Tolak laporan "${v.noId} - ${v.namaMitra}"? Catatan:`);
@@ -315,7 +334,7 @@ export default function PumkKunjunganPage() {
     }
     try {
       await callApi(`/api/pumk-visits/${v.id}`, "PATCH", note !== undefined ? { action, note } : { action });
-      setMsg(action === "submit" ? "Diajukan untuk review." : action === "approve" ? "Laporan disetujui." : "Laporan ditolak.");
+      setMsg(action === "submit" ? "Diajukan ke Asman untuk review." : action === "approve" ? "Laporan disetujui." : "Laporan ditolak.");
       await loadData();
     } catch (err: any) {
       setError(err.message);
@@ -372,12 +391,88 @@ export default function PumkKunjunganPage() {
     }
   };
 
+  const isTlUnit = (v: Visit) =>
+    user?.role === "team_leader" && !!v.unitId && v.unitId === user?.unitId;
+  const isAsmanUnit = (v: Visit) =>
+    user?.role === "asman" && !!v.unitId && v.unitId === user?.unitId;
+
+  /** Setujui/tolak hanya Asman se-unit (bukan penulis sendiri); admin tidak menyetujui. */
   const canReview = (v: Visit) => {
-    if (isAdmin) return v.status === "pending";
-    if ((user?.role === "team_leader" || user?.role === "asman") && v.unitId === user?.unitId && v.authorUid !== user?.uid) {
-      return v.status === "pending";
-    }
+    if (isAsmanUnit(v) && v.authorUid !== user?.uid) return v.status === "pending";
     return false;
+  };
+
+  /** TL se-unit boleh mengedit laporan unitnya; penulis boleh mengedit draf/ditolaknya. */
+  const canEdit = (v: Visit) => {
+    if (isAdmin) return true;
+    if (v.status !== "draft" && v.status !== "rejected") return false;
+    if (v.authorUid === user?.uid) return true;
+    return isTlUnit(v);
+  };
+
+  /** Pengajuan ke Asman oleh penulis atau TL se-unit. */
+  const canSubmit = (v: Visit) =>
+    (v.status === "draft" || v.status === "rejected") &&
+    (v.authorUid === user?.uid || isTlUnit(v));
+
+  const canAttachFile = (v: Visit) =>
+    (v.status === "draft" || v.status === "rejected") &&
+    (v.authorUid === user?.uid || isTlUnit(v) || isAdmin);
+
+  const openEdit = (v: Visit) => {
+    setEditFor(v);
+    setETanggal(v.tanggalKunjungan || "");
+    setENoId(v.noId || "");
+    setENamaMitra(v.namaMitra || "");
+    setEKolektibilitas(v.kolektibilitas || "Masalah");
+    setESaldoPokok(String(v.saldoPokok ?? 0));
+    setESaldoJasa(String(v.saldoJasa ?? 0));
+    setETotalSaldo(String(v.totalSaldo ?? 0));
+    setEJenis(v.jenisTindakLanjut || "Inventarisasi");
+    setELokasiUrl(v.lokasiUrl || "");
+    setEKondisiMitra(v.kondisiMitra || "");
+    setMsg(null);
+    setError(null);
+  };
+
+  const handleEditSave = async () => {
+    const v = editFor;
+    if (!v) return;
+    const pokok = Number(eSaldoPokok || 0);
+    const jasa = Number(eSaldoJasa || 0);
+    const total = eTotalSaldo === "" ? pokok + jasa : Number(eTotalSaldo);
+    if (!eTanggal || !eNoId.trim() || !eNamaMitra.trim()) {
+      setError("Tanggal kunjungan, Nomor ID, dan Nama Mitra wajib diisi.");
+      return;
+    }
+    if (eJenis === "Inventarisasi" && (!eLokasiUrl.trim() || !eKondisiMitra)) {
+      setError("Lokasi Mitra dan Kondisi Mitra wajib untuk Inventarisasi.");
+      return;
+    }
+    setSavingEdit(true);
+    setMsg(null);
+    setError(null);
+    try {
+      await callApi(`/api/pumk-visits/${v.id}`, "PATCH", {
+        tanggalKunjungan: eTanggal,
+        noId: eNoId,
+        namaMitra: eNamaMitra,
+        kolektibilitas: eKolektibilitas,
+        saldoPokok: pokok,
+        saldoJasa: jasa,
+        totalSaldo: total,
+        jenisTindakLanjut: eJenis,
+        lokasiUrl: eLokasiUrl || null,
+        kondisiMitra: eKondisiMitra || null,
+      });
+      setMsg("Laporan diperbarui.");
+      setEditFor(null);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const rupiah = (n: number) => Number(n || 0).toLocaleString("id-ID");
@@ -399,7 +494,7 @@ export default function PumkKunjunganPage() {
       <header style={{ marginBottom: "24px" }}>
         <h1 style={{ fontSize: "2rem", margin: 0, color: "#111" }}>Laporan Kunjungan PUMK</h1>
         <p style={{ margin: "6px 0 0 0", fontSize: "0.9rem", color: "var(--text-muted)" }}>
-          Pengganti g-form Laporan Pengelolaan UMK • unit {isAdmin ? "semua" : <b>{user?.unitId}</b>} • draf → review → rekap.
+          Pengganti g-form Laporan Pengelolaan UMK • unit {isAdmin ? "semua" : <b>{user?.unitId}</b>} • draf → Asman → UID.
         </p>
       </header>
 
@@ -573,8 +668,9 @@ export default function PumkKunjunganPage() {
                       style={{ padding: "6px 10px", fontSize: "0.8rem", minWidth: "130px" }}
                     >
                       <option value="">— Aksi —</option>
-                      {v.authorUid === user?.uid && v.status === "draft" && <option value="submit">Ajukan review</option>}
-                      {v.authorUid === user?.uid && v.status === "draft" && <option value="attach">Lampirkan file</option>}
+                      {canEdit(v) && <option value="edit">Edit</option>}
+                      {canSubmit(v) && <option value="submit">Ajukan ke Asman</option>}
+                      {canAttachFile(v) && <option value="attach">Lampirkan file</option>}
                       {canReview(v) && <option value="approve">Setujui</option>}
                       {canReview(v) && <option value="reject">Tolak</option>}
                       {((v.authorUid === user?.uid && (v.status === "draft" || v.status === "rejected")) || isAdmin) && (
@@ -589,6 +685,79 @@ export default function PumkKunjunganPage() {
         </div>
       </section>
 
+      {editFor && (
+        <div
+          style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: "16px" }}
+          onClick={() => { if (!savingEdit) setEditFor(null); }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "var(--card-bg)", border: "1px solid var(--card-border)", borderRadius: "16px", padding: "24px", width: "100%", maxWidth: "640px", maxHeight: "90vh", overflowY: "auto" }}
+          >
+            <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700 }}>Edit Laporan</h3>
+            <p style={{ margin: "6px 0 0", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+              {editFor.noId} — {editFor.namaMitra}. Perubahan hanya bisa saat status draf atau ditolak.
+            </p>
+            {editFor.status === "rejected" && editFor.reviewNote && (
+              <div style={{ marginTop: "12px", padding: "10px 14px", borderRadius: "10px", background: "rgba(239, 68, 68, 0.08)", border: "1px solid var(--card-border)", fontSize: "0.82rem" }}>
+                <b>Catatan Asman:</b> {editFor.reviewNote}
+              </div>
+            )}
+
+            <div className="kunj-grid" style={{ marginTop: "18px" }}>
+              <Field label="Tanggal kunjungan" span={4}>
+                <input className="input-field" type="date" value={eTanggal} onChange={(e) => setETanggal(e.target.value)} />
+              </Field>
+              <Field label="Nomor ID" span={4}>
+                <input className="input-field" value={eNoId} onChange={(e) => setENoId(e.target.value)} />
+              </Field>
+              <Field label="Nama Mitra" span={4}>
+                <input className="input-field" value={eNamaMitra} onChange={(e) => setENamaMitra(e.target.value)} />
+              </Field>
+              <Field label="Kolektibilitas" span={4}>
+                <select className="input-field" value={eKolektibilitas} onChange={(e) => setEKolektibilitas(e.target.value)}>
+                  {KOLEKTIBILITAS_OPTIONS.map((k) => <option key={k} value={k}>{k}</option>)}
+                </select>
+              </Field>
+              <Field label="Saldo Pokok" span={4}>
+                <input className="input-field" type="number" min="0" value={eSaldoPokok} onChange={(e) => setESaldoPokok(e.target.value)} />
+              </Field>
+              <Field label="Saldo Jasa" span={4}>
+                <input className="input-field" type="number" min="0" value={eSaldoJasa} onChange={(e) => setESaldoJasa(e.target.value)} />
+              </Field>
+              <Field label="Total Saldo" span={4} hint="Kosong = pokok + jasa">
+                <input className="input-field" type="number" min="0" value={eTotalSaldo} onChange={(e) => setETotalSaldo(e.target.value)} />
+              </Field>
+              <Field label="Jenis Tindak Lanjut" span={4}>
+                <select className="input-field" value={eJenis} onChange={(e) => setEJenis(e.target.value)}>
+                  {TINDAK_LANJUT_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              {eJenis === "Inventarisasi" && (
+                <>
+                  <Field label="Lokasi Mitra" span={6}>
+                    <input className="input-field" placeholder="https://maps…" value={eLokasiUrl} onChange={(e) => setELokasiUrl(e.target.value.trim())} />
+                  </Field>
+                  <Field label="Kondisi Mitra" span={6}>
+                    <select className="input-field" value={eKondisiMitra} onChange={(e) => setEKondisiMitra(e.target.value)}>
+                      <option value="">— Pilih —</option>
+                      {KONDISI_MITRA_OPTIONS.map((k) => <option key={k} value={k}>{k}</option>)}
+                    </select>
+                  </Field>
+                </>
+              )}
+            </div>
+
+            <div style={{ marginTop: "18px", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setEditFor(null)} disabled={savingEdit}>Batal</button>
+              <button className="btn btn-primary" onClick={handleEditSave} disabled={savingEdit}>
+                {savingEdit ? "Menyimpan..." : "Simpan perubahan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {attachFor && (
         <div
           style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: "16px" }}
@@ -602,7 +771,7 @@ export default function PumkKunjunganPage() {
               Lampirkan file
             </h3>
             <p style={{ margin: "6px 0 0", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-              {attachFor.noId} — {attachFor.namaMitra}. Hanya bisa selama status draf. File baru
+              {attachFor.noId} — {attachFor.namaMitra}. Hanya bisa saat status draf atau ditolak. File baru
               menggantikan file lama pada field yang sama.
             </p>
 

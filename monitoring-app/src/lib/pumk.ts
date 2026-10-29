@@ -21,13 +21,6 @@ export function resolvePumkBintaroGid(): string {
   return process.env.PUMK_BINTARO_GID || PUMK_BINTARO_GID_DEFAULT;
 }
 
-/** Link ke file SPS online (tab UP3 Bintaro) — dibuka di tab baru. */
-export function pumkSpsUrl(sheetId?: string, gid?: string): string {
-  const id = sheetId || PUMK_SHEET_ID_DEFAULT;
-  const g = gid || PUMK_BINTARO_GID_DEFAULT;
-  return `https://docs.google.com/spreadsheets/d/${id}/view?gid=${encodeURIComponent(g)}`;
-}
-
 export interface PumkMitra {
   noId: string;
   nama: string;

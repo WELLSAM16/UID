@@ -14,7 +14,22 @@ export const MEDIA_ALLOWED_MIME = [
   "image/webp",
 ] as const;
 
-export type MediaMime = (typeof MEDIA_ALLOWED_MIME)[number];
+/** Batas khusus video (rencana postingan). MEDIA_MAX_BYTES di PC harus >= angka ini. */
+export const MEDIA_VIDEO_MAX_BYTES = 100 * 1024 * 1024;
+
+export const MEDIA_VIDEO_MIME = ["video/mp4", "video/quicktime"] as const;
+
+/** Media rencana postingan: gambar + video (tanpa PDF). */
+export const MEDIA_PLAN_MIME = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  ...MEDIA_VIDEO_MIME,
+] as const;
+
+export type MediaMime =
+  | (typeof MEDIA_ALLOWED_MIME)[number]
+  | (typeof MEDIA_VIDEO_MIME)[number];
 
 /** Token berlaku 15 menit (cukup untuk upload 10 MB lewat relay). */
 export const MEDIA_TOKEN_TTL_SEC = 15 * 60;
@@ -39,18 +54,25 @@ export interface MediaTokenClaims {
 }
 
 /** Validasi file di sisi klien. Return pesan error atau null bila OK. */
-export function validateMediaFile(file: {
-  name: string;
-  size: number;
-  type: string;
-}): string | null {
+export function validateMediaFile(
+  file: {
+    name: string;
+    size: number;
+    type: string;
+  },
+  limits?: { allowedMime?: readonly string[]; maxBytes?: number }
+): string | null {
+  const allowed = limits?.allowedMime ?? MEDIA_ALLOWED_MIME;
+  const maxBytes = limits?.maxBytes ?? MEDIA_MAX_BYTES;
   if (!file) return "File belum dipilih";
-  if (!(MEDIA_ALLOWED_MIME as readonly string[]).includes(file.type)) {
-    return "File harus PDF atau gambar (JPG/PNG/WebP)";
+  if (!allowed.includes(file.type)) {
+    return allowed.includes("video/mp4")
+      ? "File harus gambar (JPG/PNG/WebP) atau video (MP4/MOV)"
+      : "File harus PDF atau gambar (JPG/PNG/WebP)";
   }
   if (file.size <= 0) return "File kosong";
-  if (file.size > MEDIA_MAX_BYTES) {
-    return `Ukuran file maksimal ${MEDIA_MAX_BYTES / 1024 / 1024} MB`;
+  if (file.size > maxBytes) {
+    return `Ukuran file maksimal ${Math.round(maxBytes / 1024 / 1024)} MB`;
   }
   return null;
 }

@@ -38,6 +38,7 @@ const MENUS: MainMenu[] = [
       { name: "Skoring Medsos", href: "/dashboard", icon: "📊", desc: "Live monitoring & ringkasan" },
       { name: "Input Medmas", href: "/dashboard/medmas", icon: "📰", desc: "Pemberitaan media massa", unitOnly: true },
       { name: "Rekap Bulanan", href: "/dashboard/rekap", icon: "📑", desc: "Medmas + Medsos per bulan" },
+      { name: "Rencana Postingan UP", href: "/dashboard/rencana-postingan", icon: "🗓️", desc: "Kalender konten dari UID" },
       { name: "Draf Saya", href: "/dashboard/drafts", icon: "📝", desc: "Buat rencana postingan", unitOnly: true },
       { name: "Review Draf", href: "/admin/drafts", icon: "✅", desc: "Validasi ajuan user", superAdminOnly: true },
       { name: "Kelola Target", href: "/admin/target", icon: "⚙️", desc: "Atur target tiap akun", adminOnly: true },
@@ -59,6 +60,7 @@ const MENUS: MainMenu[] = [
       { name: "Monitoring PUMK", href: "/pumk/monitoring", icon: "📉", desc: "Tunggakan UP3 Bintaro dari database UID" },
       { name: "Target PUMK", href: "/pumk/target", icon: "🎯", desc: "Set target + pantau capaian per unit" },
       { name: "Laporan Kunjungan", href: "/pumk/kunjungan", icon: "📝", desc: "Pengganti g-form laporan UMK" },
+      { name: "Database PUMK", href: "/admin/pumk-database", icon: "🗄️", desc: "Master mitra, PKS & folder piutang", allowedRoles: ["admin_uid"] },
     ],
   },
   {

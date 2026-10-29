@@ -28,6 +28,29 @@ interface Visit {
   status: string;
 }
 
+type BulkScope = "single" | "all" | "selected";
+
+interface BulkRow {
+  unitId: string;
+  targetMitra: string;
+  targetInventarisasi: string;
+  targetRupiahKembali: string;
+  assignedNoIds: string;
+}
+
+function emptyBulkRow(unitId: string): BulkRow {
+  return {
+    unitId,
+    targetMitra: "",
+    targetInventarisasi: "",
+    targetRupiahKembali: "",
+    assignedNoIds: "",
+  };
+}
+
+const assignedCount = (s: string) =>
+  s.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean).length;
+
 const EMPTY = {
   unitId: "UP3 BINTARO",
   tahun: currentYear(),
@@ -37,6 +60,8 @@ const EMPTY = {
   assignedNoIds: "",
   status: "Active" as "Active" | "Paused",
 };
+
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const rp = (n: number) =>
   new Intl.NumberFormat("id-ID", {
@@ -76,6 +101,15 @@ export default function PumkTargetPage() {
   const [formData, setFormData] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [showIds, setShowIds] = useState<string | null>(null);
+  const [scope, setScope] = useState<BulkScope>("single");
+  const [pickedUnits, setPickedUnits] = useState<string[]>([...PUMK_TARGET_UNITS]);
+  const [bulkRows, setBulkRows] = useState<BulkRow[]>([]);
+  const [bulkOverwrite, setBulkOverwrite] = useState(true);
+  const [quick, setQuick] = useState({ inventarisasi: "", rupiah: "" });
+  const [existingYear, setExistingYear] = useState<{ tahun: string; targets: PumkTarget[] }>({
+    tahun: "",
+    targets: [],
+  });
 
   const isAdmin =
     user?.role === "administrator" ||
@@ -103,13 +137,17 @@ export default function PumkTargetPage() {
 
   const parseJson = async (res: Response) => {
     const text = await res.text();
-    let data: any = {};
+    let data: Record<string, unknown> = {};
     try {
-      data = text ? JSON.parse(text) : {};
+      const parsed: unknown = text ? JSON.parse(text) : {};
+      data =
+        parsed !== null && typeof parsed === "object"
+          ? (parsed as Record<string, unknown>)
+          : {};
     } catch {
       throw new Error(`API ${res.status}: body bukan JSON (potongan: ${text.slice(0, 120)})`);
     }
-    if (!res.ok) throw new Error(`API ${res.status}: ${data.error || "gagal"}`);
+    if (!res.ok) throw new Error(`API ${res.status}: ${String(data.error || "gagal")}`);
     return data;
   };
 
@@ -127,10 +165,10 @@ export default function PumkTargetPage() {
         authFetch("/api/pumk-visits"),
       ]);
       const [d1, d2] = await Promise.all([parseJson(r1), parseJson(r2)]);
-      setTargets(d1.targets || []);
-      setVisits(d2.visits || []);
-    } catch (e: any) {
-      setError(e.message);
+      setTargets((d1.targets as PumkTarget[]) || []);
+      setVisits((d2.visits as Visit[]) || []);
+    } catch (e: unknown) {
+      setError(errMsg(e));
     } finally {
       setLoading(false);
     }
@@ -138,8 +176,31 @@ export default function PumkTargetPage() {
   }, [authLoading, user, tahun]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
+
+  // Saat mode massal dibuka, ambil target tahun tersebut untuk menandai
+  // unit mana yang akan dibuat vs diperbarui.
+  useEffect(() => {
+    if (!isModalOpen || scope === "single") return;
+    const t = formData.tahun.trim();
+    if (!/^\d{4}$/.test(t)) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await authFetch(`/api/pumk-targets?tahun=${encodeURIComponent(t)}`);
+        const data = await parseJson(res);
+        if (alive) setExistingYear({ tahun: t, targets: (data.targets as PumkTarget[]) || [] });
+      } catch {
+        if (alive) setExistingYear({ tahun: t, targets: [] });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isModalOpen, scope, formData.tahun]);
 
   const progress = useMemo(() => {
     const map = new Map<string, { inv: number; rupiah: number; mitra: Set<string> }>();
@@ -178,15 +239,186 @@ export default function PumkTargetPage() {
         assignedNoIds: (target.assignedNoIds || []).join("\n"),
         status: target.status,
       });
+      setScope("single");
     } else {
       setEditTarget(null);
       setFormData({ ...EMPTY, tahun });
+      setScope("single");
+      setPickedUnits([...PUMK_TARGET_UNITS]);
+      setBulkRows([]);
+      setQuick({ inventarisasi: "", rupiah: "" });
+      setBulkOverwrite(true);
+      setExistingYear({ tahun: "", targets: [] });
     }
     setIsModalOpen(true);
   };
 
+  const bulkUnits = useMemo(
+    () => (scope === "all" ? [...PUMK_TARGET_UNITS] : scope === "selected" ? pickedUnits : []),
+    [scope, pickedUnits]
+  );
+
+  // Baris lama apa pun (Active/Paused) akan diperbarui oleh bulk, jadi
+  // preview memakai baris pertama; baris Active diprioritaskan.
+  const existingByUnit = useMemo(() => {
+    const map = new Map<string, PumkTarget>();
+    if (existingYear.tahun !== formData.tahun.trim()) return map;
+    for (const t of existingYear.targets) {
+      const prev = map.get(t.unitId);
+      if (!prev || (prev.status !== "Active" && t.status === "Active")) {
+        map.set(t.unitId, t);
+      }
+    }
+    return map;
+  }, [existingYear, formData.tahun]);
+
+  /** Samakan isi tabel bulk dengan daftar unit yang dipilih. */
+  const syncBulkRows = (units: string[]) => {
+    setBulkRows((prev) => units.map((u) => prev.find((r) => r.unitId === u) || emptyBulkRow(u)));
+  };
+
+  const changeScope = (next: BulkScope) => {
+    setScope(next);
+    const units = next === "all" ? [...PUMK_TARGET_UNITS] : next === "selected" ? pickedUnits : [];
+    syncBulkRows(units);
+  };
+
+  const togglePickedUnit = (unitId: string) => {
+    const next = pickedUnits.includes(unitId)
+      ? pickedUnits.filter((u) => u !== unitId)
+      : [...pickedUnits, unitId];
+    setPickedUnits(next);
+    if (scope === "selected") syncBulkRows(next);
+  };
+
+  const applyQuickToAll = () => {
+    if (!quick.inventarisasi.trim() || !quick.rupiah.trim()) {
+      alert("Isi nilai cepat inventarisasi dan rupiah dulu.");
+      return;
+    }
+    setBulkRows((prev) =>
+      prev.map((r) => ({
+        ...r,
+        targetInventarisasi: quick.inventarisasi,
+        targetRupiahKembali: quick.rupiah,
+      }))
+    );
+  };
+
+  const updateBulkRow = (
+    unitId: string,
+    field:
+      | "targetMitra"
+      | "targetInventarisasi"
+      | "targetRupiahKembali"
+      | "assignedNoIds",
+    value: string
+  ) => {
+    setBulkRows((prev) =>
+      prev.map((r) => {
+        if (r.unitId !== unitId) return r;
+        if (field !== "assignedNoIds") return { ...r, [field]: value };
+
+        // Saat daftar NO ID ditempel, target mitra otomatis mengikuti
+        // jumlahnya selama belum diubah manual.
+        const oldCount = assignedCount(r.assignedNoIds);
+        const next = { ...r, assignedNoIds: value };
+        if (!r.targetMitra.trim() || Number(r.targetMitra) === oldCount) {
+          next.targetMitra = String(assignedCount(value));
+        }
+        return next;
+      })
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // --- Mode massal: banyak unit sekaligus ---
+    if (!editTarget && scope !== "single") {
+      if (bulkRows.length === 0) {
+        alert("Pilih minimal satu unit.");
+        return;
+      }
+      if (!/^\d{4}$/.test(formData.tahun.trim())) {
+        alert("Tahun wajib format YYYY (cth 2026).");
+        return;
+      }
+      const items: Array<{
+        unitId: string;
+        targetMitra: number;
+        targetInventarisasi: number;
+        targetRupiahKembali: number;
+        assignedNoIds?: string;
+      }> = [];
+      for (const r of bulkRows) {
+        const idsCount = assignedCount(r.assignedNoIds);
+        if (!r.targetInventarisasi.trim() || !r.targetRupiahKembali.trim()) {
+          alert(
+            `Lengkapi target inventarisasi dan rupiah untuk ${formatUnitDisplay(r.unitId)}.`
+          );
+          return;
+        }
+        if (!r.targetMitra.trim() && idsCount === 0) {
+          alert(
+            `Isi daftar NO ID mitra atau target mitra untuk ${formatUnitDisplay(r.unitId)}.`
+          );
+          return;
+        }
+        const mitra = r.targetMitra.trim() ? Number(r.targetMitra) : idsCount;
+        const inv = Number(r.targetInventarisasi);
+        const rupiah = Number(r.targetRupiahKembali);
+        if (
+          !Number.isInteger(mitra) || mitra < 0 ||
+          !Number.isInteger(inv) || inv < 0 ||
+          !Number.isFinite(rupiah) || rupiah < 0
+        ) {
+          alert(
+            `Target ${formatUnitDisplay(r.unitId)} harus angka >= 0 (mitra & inventarisasi bilangan bulat).`
+          );
+          return;
+        }
+        items.push({
+          unitId: r.unitId,
+          targetMitra: mitra,
+          targetInventarisasi: inv,
+          targetRupiahKembali: rupiah,
+          // Kolom kosong = pertahankan daftar lama (bila ada).
+          ...(r.assignedNoIds.trim() ? { assignedNoIds: r.assignedNoIds } : {}),
+        });
+      }
+      setSaving(true);
+      try {
+        const res = await authFetch("/api/pumk-targets/bulk", {
+          method: "POST",
+          body: JSON.stringify({
+            tahun: formData.tahun.trim(),
+            items,
+            overwrite: bulkOverwrite,
+          }),
+        });
+        const data = await parseJson(res);
+        const s = (data.summary || {}) as {
+          created?: number;
+          updated?: number;
+          skipped?: number;
+        };
+        alert(
+          `Target ${formData.tahun} disimpan: ${s.created || 0} dibuat, ` +
+            `${s.updated || 0} diperbarui, ${s.skipped || 0} dilewati.`
+        );
+        setIsModalOpen(false);
+        const savedYear = formData.tahun.trim();
+        if (savedYear !== tahun) setTahun(savedYear);
+        else load();
+      } catch (err: unknown) {
+        alert("Gagal menyimpan: " + errMsg(err));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     const inv = parseInt(formData.targetInventarisasi, 10);
     const rupiah = Number(formData.targetRupiahKembali);
     const mitra = parseInt(formData.targetMitra, 10);
@@ -224,8 +456,8 @@ export default function PumkTargetPage() {
       await parseJson(res);
       setIsModalOpen(false);
       load();
-    } catch (e: any) {
-      alert("Gagal menyimpan: " + e.message);
+    } catch (e: unknown) {
+      alert("Gagal menyimpan: " + errMsg(e));
     } finally {
       setSaving(false);
     }
@@ -237,13 +469,10 @@ export default function PumkTargetPage() {
       const res = await authFetch(`/api/pumk-targets/${id}`, { method: "DELETE" });
       await parseJson(res);
       load();
-    } catch (e: any) {
-      alert("Gagal hapus: " + e.message);
+    } catch (e: unknown) {
+      alert("Gagal hapus: " + errMsg(e));
     }
   };
-
-  const assignedCount = (s: string) =>
-    s.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean).length;
 
   return (
     <div style={{ maxWidth: "1300px", margin: "0 auto" }}>
@@ -251,8 +480,9 @@ export default function PumkTargetPage() {
         <div>
           <h1 style={{ fontSize: "2.2rem", margin: 0, color: "#111" }}>Target PUMK per Unit</h1>
           <p style={{ margin: "5px 0 0 0", color: "#111", fontSize: "0.9rem" }}>
-            Admin UID menetapkan target inventarisasi, rupiah kembali, dan mitra yang ditangani tiap UP3/UP2D.
-            Capaian dihitung dari kunjungan <b>approved</b> tahun berjalan.
+            Admin UID membagi mitra ke tiap UP3/UP2D: isi daftar NO ID mitra yang menjadi tanggung jawab
+            unit tersebut, lalu target inventarisasi dan rupiahnya. Capaian dihitung dari kunjungan
+            <b> approved</b> tahun berjalan.
           </p>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
@@ -403,107 +633,363 @@ export default function PumkTargetPage() {
           background: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)",
           display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "16px",
         }}>
-          <div className="glass-panel" style={{ padding: "30px", width: "100%", maxWidth: "560px", maxHeight: "90vh", overflowY: "auto" }}>
-            <h2 style={{ marginBottom: "6px" }}>{editTarget ? "Edit Target PUMK" : "Set Target PUMK"}</h2>
+          <div
+            className="glass-panel"
+            style={{
+              padding: "30px",
+              width: "100%",
+              maxWidth: !editTarget && scope !== "single" ? "1120px" : "560px",
+              maxHeight: "92vh",
+              overflowY: "auto",
+            }}
+          >
+            <h2 style={{ marginBottom: "6px" }}>
+              {editTarget
+                ? "Edit Target PUMK"
+                : scope === "single"
+                  ? "Set Target PUMK"
+                  : `Set Target ${bulkUnits.length} Unit`}
+            </h2>
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: 0 }}>
               Satu baris aktif per unit per tahun. Daftar mitra = NO ID dari SPS (kolom CASCADING UP), satu per baris.
             </p>
             <form onSubmit={handleSubmit}>
-              <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
-                <div style={{ flex: 2 }}>
-                  <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Unit*</label>
-                  <select
-                    className="input-field"
-                    value={formData.unitId}
-                    onChange={(e) => setFormData({ ...formData, unitId: e.target.value })}
-                    style={{ width: "100%" }}
-                  >
-                    {PUMK_TARGET_UNITS.map((u) => (
-                      <option key={u} value={u}>{formatUnitDisplay(u)}</option>
-                    ))}
-                  </select>
+              {!editTarget && (
+                <div style={{ marginBottom: "16px" }}>
+                  <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Cakupan*</label>
+                  <div style={{ display: "flex", gap: "18px", flexWrap: "wrap", fontSize: "0.9rem" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <input type="radio" name="bulk-scope" checked={scope === "single"} onChange={() => changeScope("single")} />
+                      Satu unit
+                    </label>
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <input type="radio" name="bulk-scope" checked={scope === "all"} onChange={() => changeScope("all")} />
+                      Semua unit ({PUMK_TARGET_UNITS.length})
+                    </label>
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <input type="radio" name="bulk-scope" checked={scope === "selected"} onChange={() => changeScope("selected")} />
+                      Pilih unit
+                    </label>
+                  </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Tahun*</label>
-                  <input
-                    className="input-field"
-                    inputMode="numeric"
-                    value={formData.tahun}
-                    onChange={(e) => setFormData({ ...formData, tahun: e.target.value.replace(/[^0-9]/g, "").slice(0, 4) })}
-                    placeholder="2026"
-                    style={{ width: "100%" }}
-                  />
-                </div>
-              </div>
+              )}
 
-              <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Target Mitra Ditangani* (cascading)</label>
-                <input
-                  type="number"
-                  min={0}
-                  className="input-field"
-                  placeholder="Cth: 40"
-                  value={formData.targetMitra}
-                  onChange={(e) => setFormData({ ...formData, targetMitra: e.target.value })}
-                />
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Target Inventarisasi* (mitra selesai)</label>
-                <input
-                  type="number"
-                  min={0}
-                  className="input-field"
-                  placeholder="Cth: 25"
-                  value={formData.targetInventarisasi}
-                  onChange={(e) => setFormData({ ...formData, targetInventarisasi: e.target.value })}
-                />
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Target Rupiah Kembali* (Rp)</label>
-                <input
-                  type="number"
-                  min={0}
-                  className="input-field"
-                  placeholder="Cth: 500000000"
-                  value={formData.targetRupiahKembali}
-                  onChange={(e) => setFormData({ ...formData, targetRupiahKembali: e.target.value })}
-                />
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>
-                  Daftar NO ID Mitra Ditangani (opsional, {assignedCount(formData.assignedNoIds)} terisi)
-                </label>
-                <textarea
-                  className="input-field"
-                  rows={5}
-                  placeholder={"Satu NO ID per baris, cth:\n01-01-778/93\n01-01-207/00"}
-                  value={formData.assignedNoIds}
-                  onChange={(e) => setFormData({ ...formData, assignedNoIds: e.target.value })}
-                  style={{ width: "100%", resize: "vertical" }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "30px" }}>
-                <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Status</label>
-                <select
-                  className="input-field"
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as "Active" | "Paused" })}
+              {!editTarget && scope === "selected" && (
+                <div
+                  style={{
+                    marginBottom: "16px",
+                    border: "1px solid rgba(0,0,0,0.12)",
+                    borderRadius: "10px",
+                    padding: "12px",
+                    maxHeight: "180px",
+                    overflowY: "auto",
+                  }}
                 >
-                  <option value="Active">Active</option>
-                  <option value="Paused">Paused</option>
-                </select>
-              </div>
+                  <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ padding: "4px 10px", fontSize: "0.78rem" }}
+                      onClick={() => {
+                        setPickedUnits([...PUMK_TARGET_UNITS]);
+                        syncBulkRows([...PUMK_TARGET_UNITS]);
+                      }}
+                    >
+                      Pilih semua
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ padding: "4px 10px", fontSize: "0.78rem" }}
+                      onClick={() => {
+                        setPickedUnits([]);
+                        syncBulkRows([]);
+                      }}
+                    >
+                      Kosongkan
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "6px 14px" }}>
+                    {PUMK_TARGET_UNITS.map((u) => (
+                      <label key={u} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.85rem" }}>
+                        <input type="checkbox" checked={pickedUnits.includes(u)} onChange={() => togglePickedUnit(u)} />
+                        {formatUnitDisplay(u)}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {scope === "single" ? (
+                <>
+                  <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
+                    <div style={{ flex: 2 }}>
+                      <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Unit*</label>
+                      <select
+                        className="input-field"
+                        value={formData.unitId}
+                        onChange={(e) => setFormData({ ...formData, unitId: e.target.value })}
+                        style={{ width: "100%" }}
+                      >
+                        {PUMK_TARGET_UNITS.map((u) => (
+                          <option key={u} value={u}>{formatUnitDisplay(u)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Tahun*</label>
+                      <input
+                        className="input-field"
+                        inputMode="numeric"
+                        value={formData.tahun}
+                        onChange={(e) => setFormData({ ...formData, tahun: e.target.value.replace(/[^0-9]/g, "").slice(0, 4) })}
+                        placeholder="2026"
+                        style={{ width: "100%" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: "16px" }}>
+                    <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Target Mitra Ditangani* (cascading)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className="input-field"
+                      placeholder="Cth: 40"
+                      value={formData.targetMitra}
+                      onChange={(e) => setFormData({ ...formData, targetMitra: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: "16px" }}>
+                    <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Target Inventarisasi* (mitra selesai)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className="input-field"
+                      placeholder="Cth: 25"
+                      value={formData.targetInventarisasi}
+                      onChange={(e) => setFormData({ ...formData, targetInventarisasi: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: "16px" }}>
+                    <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Target Rupiah Kembali* (Rp)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className="input-field"
+                      placeholder="Cth: 500000000"
+                      value={formData.targetRupiahKembali}
+                      onChange={(e) => setFormData({ ...formData, targetRupiahKembali: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: "16px" }}>
+                    <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>
+                      Daftar NO ID Mitra Ditangani (opsional, {assignedCount(formData.assignedNoIds)} terisi)
+                    </label>
+                    <textarea
+                      className="input-field"
+                      rows={5}
+                      placeholder={"Satu NO ID per baris, cth:\n01-01-778/93\n01-01-207/00"}
+                      value={formData.assignedNoIds}
+                      onChange={(e) => setFormData({ ...formData, assignedNoIds: e.target.value })}
+                      style={{ width: "100%", resize: "vertical" }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: "30px" }}>
+                    <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Status</label>
+                    <select
+                      className="input-field"
+                      value={formData.status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as "Active" | "Paused" })}
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Paused">Paused</option>
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: "flex", gap: "12px", marginBottom: "16px", alignItems: "flex-end" }}>
+                    <div style={{ flex: "0 0 140px" }}>
+                      <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Tahun*</label>
+                      <input
+                        className="input-field"
+                        inputMode="numeric"
+                        value={formData.tahun}
+                        onChange={(e) => setFormData({ ...formData, tahun: e.target.value.replace(/[^0-9]/g, "").slice(0, 4) })}
+                        placeholder="2026"
+                        style={{ width: "100%" }}
+                      />
+                    </div>
+                    <div style={{ flex: 1, fontSize: "0.85rem", color: "var(--text-muted)", paddingBottom: "10px" }}>
+                      {bulkUnits.length} unit dipilih
+                      {bulkUnits.length > 0 && ` · ${bulkRows.length} baris siap diisi`}
+                      {" · "}
+                      {bulkRows.reduce((n, r) => n + assignedCount(r.assignedNoIds), 0)} NO ID
+                      {" · "}
+                      target lama yang ditemukan:{" "}
+                      {existingYear.tahun === formData.tahun.trim() ? existingYear.targets.length : 0}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "10px",
+                      background: "rgba(56,189,248,0.07)",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    <b style={{ fontSize: "0.9rem" }}>Isi cepat inventarisasi & rupiah</b>
+                    <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                      {" "}— opsional, tidak mengubah daftar mitra.
+                    </span>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px", marginTop: "8px" }}>
+                      <input
+                        type="number"
+                        min={0}
+                        className="input-field"
+                        placeholder="Target inventarisasi"
+                        value={quick.inventarisasi}
+                        onChange={(e) => setQuick({ ...quick, inventarisasi: e.target.value })}
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        className="input-field"
+                        placeholder="Target rupiah"
+                        value={quick.rupiah}
+                        onChange={(e) => setQuick({ ...quick, rupiah: e.target.value })}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ marginTop: "8px", padding: "6px 12px", fontSize: "0.82rem" }}
+                      onClick={applyQuickToAll}
+                    >
+                      Terapkan ke semua baris
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      border: "1px solid rgba(0,0,0,0.12)",
+                      borderRadius: "10px",
+                      maxHeight: "420px",
+                      overflow: "auto",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <table className="data-table" style={{ margin: 0 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Unit</th>
+                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
+                            Daftar NO ID Mitra
+                          </th>
+                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Mitra</th>
+                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Inventarisasi</th>
+                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Rupiah</th>
+                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bulkRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} style={{ textAlign: "center" }}>
+                              Belum ada unit dipilih.
+                            </td>
+                          </tr>
+                        ) : (
+                          bulkRows.map((r) => {
+                            const existing = existingByUnit.get(r.unitId);
+                            const label = existing ? (bulkOverwrite ? "Diperbarui" : "Dilewati") : "Baru";
+                            const color = existing
+                              ? bulkOverwrite
+                                ? "#0284c7"
+                                : "var(--text-muted)"
+                              : "var(--success)";
+                            return (
+                              <tr key={r.unitId}>
+                                <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{formatUnitDisplay(r.unitId)}</td>
+                                <td>
+                                  <textarea
+                                    rows={2}
+                                    className="input-field"
+                                    style={{ width: "230px", minWidth: "210px", fontSize: "0.8rem", resize: "vertical" }}
+                                    placeholder={"Satu NO ID per baris / pisah koma\ncth: 01-01-778/93"}
+                                    value={r.assignedNoIds}
+                                    onChange={(e) => updateBulkRow(r.unitId, "assignedNoIds", e.target.value)}
+                                  />
+                                  <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    {assignedCount(r.assignedNoIds)} NO ID
+                                  </div>
+                                </td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    className="input-field"
+                                    style={{ width: "90px", textAlign: "right" }}
+                                    value={r.targetMitra}
+                                    onChange={(e) => updateBulkRow(r.unitId, "targetMitra", e.target.value)}
+                                  />
+                                </td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    className="input-field"
+                                    style={{ width: "100px", textAlign: "right" }}
+                                    value={r.targetInventarisasi}
+                                    onChange={(e) => updateBulkRow(r.unitId, "targetInventarisasi", e.target.value)}
+                                  />
+                                </td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    className="input-field"
+                                    style={{ width: "150px", textAlign: "right" }}
+                                    value={r.targetRupiahKembali}
+                                    onChange={(e) => updateBulkRow(r.unitId, "targetRupiahKembali", e.target.value)}
+                                  />
+                                </td>
+                                <td>
+                                  <span style={{ fontSize: "0.8rem", fontWeight: 600, color }}>{label}</span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", fontSize: "0.85rem" }}>
+                    <input type="checkbox" checked={bulkOverwrite} onChange={(e) => setBulkOverwrite(e.target.checked)} />
+                    Perbarui target yang sudah ada (jika tidak dicentang, unit yang sudah punya target dilewati)
+                  </label>
+                  <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: 0, marginBottom: "20px" }}>
+                    Tempel banyak NO ID mitra per unit (satu per baris atau pisahkan koma). Target mitra otomatis
+                    mengikuti jumlah NO ID selama belum diubah manual. Kolom kosong mempertahankan daftar lama;
+                    untuk menghapus daftar, edit unit tersebut. Tidak ada pembagian rata: setiap unit memegang
+                    mitra yang diinput untuk unit itu.
+                  </p>
+                </>
+              )}
 
               <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
                 <button type="button" className="btn" style={{ background: "rgba(255,255,255,0.1)" }} onClick={() => setIsModalOpen(false)}>
                   Batal
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? "Menyimpan…" : "Simpan"}
+                <button type="submit" className="btn btn-primary" disabled={saving || (scope !== "single" && bulkRows.length === 0)}>
+                  {saving ? "Menyimpan…" : scope === "single" ? "Simpan" : `Simpan ${bulkRows.length} Target`}
                 </button>
               </div>
             </form>

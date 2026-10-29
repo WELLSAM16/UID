@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-import { requireAdmin, requireUser } from "@/lib/authServer";
+import { requireUser } from "@/lib/authServer";
 import { getInstagramData } from "../instagram/route";
 import { IG_ARCHIVE_COLUMNS, resolveArchiveSheetId } from "@/lib/igArchive";
 
@@ -66,22 +66,22 @@ function isCronRequest(request: NextRequest): boolean {
 async function authorized(request: NextRequest): Promise<{ ok: boolean; via: string }> {
   // 1) Vercel Cron mengirim Bearer CRON_SECRET otomatis bila env diset
   if (isCronRequest(request)) return { ok: true, via: "cron" };
-  // 2) Admin login (untuk backfill/percobaan manual via curl — tanpa tombol UI)
-  const { response } = await requireAdmin(request);
-  if (!response) return { ok: true, via: "admin" };
+  // 2) Semua user yang login boleh sync manual (hanya menambah/menyegarkan data terbaru).
+  const { response } = await requireUser(request);
+  if (!response) return { ok: true, via: "user" };
   return { ok: false, via: "none" };
 }
 
 /**
  * POST /api/ig-sync — sinkronisasi harian (Vercel Cron 01:00 WIB).
  * Fetch live via Composio → upsert ke sheet arsip per ID postingan.
- * Auth: Bearer CRON_SECRET atau admin login.
+ * Auth: Bearer CRON_SECRET atau user login (sync manual dari dashboard).
  * Body opsional: { maxPosts?: number } (default env IG_SYNC_MAX_POSTS || 100).
  */
 export async function POST(request: NextRequest) {
   const auth = await authorized(request);
   if (!auth.ok) {
-    return NextResponse.json({ error: "Unauthorized (perlu CRON_SECRET / admin)" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized (login atau CRON_SECRET diperlukan)" }, { status: 401 });
   }
 
   let maxPosts = parseInt(process.env.IG_SYNC_MAX_POSTS || "100", 10);
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/ig-sync — dua mode:
- * - Dipicu Vercel Cron (GET + Bearer CRON_SECRET, atau admin + ?run=1):
+ * - Dipicu Vercel Cron (GET + Bearer CRON_SECRET, atau user login + ?run=1):
  *   jalankan sinkronisasi.
  * - Selain itu (user login): kembalikan status sync terakhir untuk
  *   label "diperbarui" di UI.
@@ -110,11 +110,11 @@ export async function GET(request: NextRequest) {
     return runSync("cron", parseInt(process.env.IG_SYNC_MAX_POSTS || "100", 10));
   }
   if (params.get("run") === "1") {
-    const { response } = await requireAdmin(request);
+    const { response } = await requireUser(request);
     if (response) return response;
     const mp = parseInt(params.get("maxPosts") || process.env.IG_SYNC_MAX_POSTS || "100", 10);
     const maxPosts = Number.isInteger(mp) && mp >= 1 && mp <= 500 ? mp : 100;
-    return runSync("admin", maxPosts);
+    return runSync("user", maxPosts);
   }
 
   const { response } = await requireUser(request);

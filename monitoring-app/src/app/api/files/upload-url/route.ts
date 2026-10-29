@@ -75,19 +75,25 @@ export async function POST(request: Request) {
   const filename = String(body.filename || "").trim();
   const size = Number(body.size);
   const mime = String(body.mime || "").toLowerCase();
+  const allowedMime = rule.allowedMime ?? MEDIA_ALLOWED_MIME;
+  const maxBytes = rule.maxBytes ?? MEDIA_MAX_BYTES;
 
   if (!filename || filename.length > 200) {
     return NextResponse.json({ error: "nama file tidak valid" }, { status: 400 });
   }
-  if (!(MEDIA_ALLOWED_MIME as readonly string[]).includes(mime)) {
+  if (!allowedMime.includes(mime)) {
     return NextResponse.json(
-      { error: "File harus PDF atau gambar (JPG/PNG/WebP)" },
+      {
+        error: allowedMime.includes("video/mp4")
+          ? "File harus gambar (JPG/PNG/WebP) atau video (MP4/MOV)"
+          : "File harus PDF atau gambar (JPG/PNG/WebP)",
+      },
       { status: 400 }
     );
   }
-  if (!Number.isInteger(size) || size <= 0 || size > MEDIA_MAX_BYTES) {
+  if (!Number.isInteger(size) || size <= 0 || size > maxBytes) {
     return NextResponse.json(
-      { error: `Ukuran file harus 1 byte sampai ${MEDIA_MAX_BYTES / 1024 / 1024} MB` },
+      { error: `Ukuran file harus 1 byte sampai ${Math.round(maxBytes / 1024 / 1024)} MB` },
       { status: 400 }
     );
   }
@@ -136,7 +142,7 @@ export async function POST(request: Request) {
     url,
     method: "PUT",
     headers: { "Content-Type": mime },
-    maxBytes: MEDIA_MAX_BYTES,
+    maxBytes,
     expiresInSec: MEDIA_TOKEN_TTL_SEC,
     expiresAt,
   });

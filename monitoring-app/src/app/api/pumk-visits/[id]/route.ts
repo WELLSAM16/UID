@@ -17,17 +17,25 @@ function isAdminRole(role: string | undefined): boolean {
 }
 
 function canReview(user: { uid: string; role: string; unitId?: string }, doc: any): boolean {
+  // Setujui/tolak hanya Asman se-unit, bukan TL dan bukan penulis sendiri.
+  if (user.role !== "asman") return false;
+  if (!user.unitId || doc.unitId !== user.unitId) return false;
+  return doc.authorUid !== user.uid;
+}
+
+/** TL se-unit boleh mengubah & mengajukan laporan unitnya; penulis boleh mengubah drafnya. */
+function canEditVisit(user: { uid: string; role: string; unitId?: string }, doc: any): boolean {
   if (isAdminRole(user.role)) return true;
-  if ((user.role === "team_leader" || user.role === "asman") && user.unitId && doc.unitId === user.unitId) {
-    return doc.authorUid !== user.uid;
-  }
-  return false;
+  if (doc.status !== "draft" && doc.status !== "rejected") return false;
+  if (doc.authorUid === user.uid) return true;
+  return user.role === "team_leader" && !!user.unitId && doc.unitId === user.unitId;
 }
 
 /**
  * PATCH /api/pumk-visits/[id]
- * - Pemilik (status draft): ubah field / submit ({ action: "submit" }).
- * - Reviewer (TL/Asman se-unit selain penulis, atau admin): approve / reject.
+ * - Pemilik/TL se-unit (status draft/ditolak): ubah field.
+ * - Pemilik atau TL se-unit: submit ({ action: "submit" }) → menunggu Asman.
+ * - Asman se-unit selain penulis: approve / reject (admin tidak menyetujui).
  */
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { response, user } = await requireUser(request);
@@ -52,7 +60,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       return NextResponse.json({ error: "Hanya laporan pending yang bisa direview" }, { status: 409 });
     }
     if (!canReview(user as any, doc)) {
-      return NextResponse.json({ error: "Hanya TL/Asman se-unit atau admin yang boleh mereview" }, { status: 403 });
+      return NextResponse.json({ error: "Hanya Asman se-unit yang boleh menyetujui/menolak" }, { status: 403 });
     }
     await ref.set(
       {
@@ -67,13 +75,18 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     return NextResponse.json({ ok: true, status: action === "approve" ? "approved" : "rejected" });
   }
 
-  // --- Pemilik: ajukan (draft → pending) ---
+  // --- Pemilik/TL se-unit: ajukan ke Asman (draft/ditolak → pending) ---
   if (action === "submit") {
-    if (doc.authorUid !== user.uid) {
-      return NextResponse.json({ error: "Hanya penulis yang boleh mengajukan" }, { status: 403 });
+    const isTlUnit =
+      user.role === "team_leader" && !!user.unitId && doc.unitId === user.unitId;
+    if (doc.authorUid !== user.uid && !isTlUnit) {
+      return NextResponse.json(
+        { error: "Hanya penulis atau TL unit yang boleh mengajukan laporan" },
+        { status: 403 }
+      );
     }
-    if (doc.status !== "draft") {
-      return NextResponse.json({ error: "Hanya draf yang bisa diajukan" }, { status: 409 });
+    if (doc.status !== "draft" && doc.status !== "rejected") {
+      return NextResponse.json({ error: "Hanya draf atau laporan ditolak yang bisa diajukan" }, { status: 409 });
     }
     // Jangan biarkan laporan Penagihan diajukan tanpa bukti bayar.
     if (String(doc.jenisTindakLanjut || "") === "Penagihan" && !doc.buktiBayarPath && !doc.buktiBayarUrl) {
@@ -82,14 +95,26 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
         { status: 409 }
       );
     }
-    await ref.set({ status: "pending", submittedAt: now, updatedAt: now }, { merge: true });
+    await ref.set(
+      {
+        status: "pending",
+        submittedAt: now,
+        updatedAt: now,
+        reviewNote: null,
+        reviewedBy: null,
+        reviewedAt: null,
+      },
+      { merge: true }
+    );
     return NextResponse.json({ ok: true, status: "pending" });
   }
 
-  // --- Pemilik/admin: ubah field (draf milik sendiri, atau admin kapan saja) ---
-  const isOwnerDraft = doc.authorUid === user.uid && doc.status === "draft";
-  if (!isOwnerDraft && !isAdminRole(user.role)) {
-    return NextResponse.json({ error: "Hanya draf milik sendiri yang bisa diubah" }, { status: 403 });
+  // --- Pemilik/TL se-unit/admin: ubah field ---
+  if (!canEditVisit(user as any, doc)) {
+    return NextResponse.json(
+      { error: "Hanya draf/ditolak milik sendiri, TL se-unit, atau admin yang bisa diubah" },
+      { status: 403 }
+    );
   }
   const needsValidation =
     body.tanggalKunjungan !== undefined ||
@@ -140,9 +165,9 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     body.formOPath !== undefined ||
     body.dokumenLainPath !== undefined ||
     body.buktiBayarPath !== undefined;
-  if (menyentuhFile && doc.status !== "draft") {
+  if (menyentuhFile && doc.status !== "draft" && doc.status !== "rejected") {
     return NextResponse.json(
-      { error: "File bukti tidak bisa diubah setelah laporan diajukan. Buat laporan revisi baru." },
+      { error: "File bukti hanya bisa diubah saat draf atau setelah laporan ditolak." },
       { status: 409 }
     );
   }
