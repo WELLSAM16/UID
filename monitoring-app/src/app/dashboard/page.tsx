@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/authContext";
-import { isAdminRole, formatUnitDisplay } from "@/lib/roles";
+import { formatUnitDisplay } from "@/lib/roles";
 import { useRouter } from "next/navigation";
 
 interface Post {
@@ -114,7 +114,6 @@ function MetricBox({ label, value, color }: { label: string; value: number | str
 export default function Dashboard() {
   const { user, loading: authLoading, getToken } = useAuth();
   const router = useRouter();
-  const isAdmin = isAdminRole(user?.role);
   const [posts, setPosts] = useState<Post[]>([]);
   const [availableAccounts, setAvailableAccounts] = useState<string[]>([]);
   // Pemetaan username akun -> unitId (dari /api/monitored-accounts).
@@ -208,7 +207,7 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user, getToken, router]);
 
-  // Sync manual (admin only): tarik postingan terbaru ke arsip sekarang juga,
+  // Sync manual (semua role): tarik postingan terbaru ke arsip sekarang juga,
   // tanpa menunggu cron 01:00 WIB. Idempoten (upsert per ID) — aman walau
   // berbarengan dengan cron.
   async function syncNow() {
@@ -235,7 +234,7 @@ export default function Dashboard() {
       try { data = text ? JSON.parse(text) : {}; }
       catch { throw new Error(`API ${res.status}: respons bukan JSON.`); }
       if (res.status === 403 || res.status === 401) {
-        throw new Error("Hanya admin yang boleh sync manual.");
+        throw new Error("Sesi login tidak valid. Silakan login ulang.");
       }
       if (!res.ok) {
         const detail = data.details ? ` — ${data.details}` : "";
@@ -384,24 +383,22 @@ export default function Dashboard() {
           <Link href="/dashboard/skoring">
             <button className="btn" style={{ background: "var(--success)", color: "white", padding: "8px 16px", fontSize: "0.9rem", border: "none" }}>Skoring</button>
           </Link>
-          {isAdmin && (
-            <button
-              className="btn"
-              onClick={syncNow}
-              disabled={syncing}
-              title="Tarik postingan terbaru ke arsip sekarang (tanpa menunggu cron 01:00 WIB)"
-              style={{
-                background: syncing ? "var(--text-muted)" : "#38bdf8",
-                color: "white",
-                padding: "8px 16px",
-                fontSize: "0.9rem",
-                border: "none",
-                cursor: syncing ? "wait" : "pointer",
-              }}
-            >
-              {syncing ? "Syncing…" : "Sync Sekarang"}
-            </button>
-          )}
+          <button
+            className="btn"
+            onClick={syncNow}
+            disabled={syncing}
+            title="Tarik postingan terbaru ke arsip sekarang (tanpa menunggu cron 01:00 WIB)"
+            style={{
+              background: syncing ? "var(--text-muted)" : "#38bdf8",
+              color: "white",
+              padding: "8px 16px",
+              fontSize: "0.9rem",
+              border: "none",
+              cursor: syncing ? "wait" : "pointer",
+            }}
+          >
+            {syncing ? "Syncing…" : "Sync Sekarang"}
+          </button>
           <span style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--warning)", fontSize: "0.85rem" }}>
             <span className="live-indicator"></span> Snapshot Harian
           </span>
