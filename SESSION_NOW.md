@@ -3,17 +3,18 @@
 > Baca file ini saja saat membuka sesi baru. Detail historis: `SESSION_RESUME.md` (jangan dibaca penuh).
 
 ## Posisi sekarang
-- Branch `feat-draft-internal-storage` @ `4e2eca5`, sudah di-push. `origin/master` @ `34f15fd`
+- Branch `feat-draft-internal-storage` @ `6befdcc`, sudah di-push. `origin/master` @ `34f15fd`
   (merge PR #19; seluruh surface media sudah live).
-- **Lima commit belum di-merge**: `72177b9` (target massal) + `9736300` (banyak NO ID per unit) +
+- **Tujuh commit belum di-merge**: `72177b9` (target massal) + `9736300` (banyak NO ID per unit) +
   `03089d6` (Database PUMK internal) + `08a0319` (menu Database PUMK pindah ke dropdown PUMK) +
-  `4e2eca5` (alur persetujuan kunjungan: Asman approve, TL edit/ajukan). Langkah user:
+  `4e2eca5` (alur persetujuan kunjungan) + `1be99a2` (sync semua role) +
+  `6befdcc` (peta rencana postingan UP). Langkah user:
   `https://github.com/WELLSAM16/UID/compare/master...feat-draft-internal-storage?expand=1`
   judul saran: "PUMK: target massal, banyak mitra/unit, database internal".
 - Sudah live & terbukti di production: **PUMK kunjungan** (bukti uji 23 Okt di bawah) + seluruh
   surface media (draf konten, draf press release, EVP, stakeholder realisasi) via PR #18/#19.
 - `tsc --noEmit` EXIT 0, `eslint` file terkait EXIT 0 (hanya warning `<img>` lama di Sidebar),
-  `next build` EXIT 0 (29 Okt, termasuk setelah `4e2eca5`). Working tree: `M SESSION_RESUME.md`,
+  `next build` EXIT 0 (29 Okt, termasuk setelah `6befdcc`). Working tree: `M SESSION_RESUME.md`,
   `D NOTULENSI.md`, `?? monitoring-app/docs/` (jangan sentuh). `gh` CLI tidak ada → cek PR via API.
 
 ## Sesi 26–28 Okt — target PUMK massal (`72177b9` + `9736300`)
@@ -74,6 +75,29 @@
   Filter unit di API tetap: role unit hanya melihat laporan unitnya sendiri.
 - `tsc --noEmit` + `next build` lolos (29 Okt). **Belum** uji API/klik browser dengan akun TL & Asman.
 
+## Sesi 29 Okt — sync semua role + Peta Rencana Postingan UP (`1be99a2`, `6befdcc`)
+- **Sync manual Skoring Medsos** kini tampil untuk semua role. API `GET/POST /api/ig-sync?run=1`
+  memakai `requireUser` (bukan `requireAdmin`); cron tetap pakai `CRON_SECRET`. Tidak ada perubahan
+  data selain upsert arsip (idempoten).
+- Menu baru **Medsos → Rencana Postingan UP** (`/dashboard/rencana-postingan`, ikon 🗓️) untuk semua
+  role. Tampilan **kalender bulanan**; unit hanya melihat, membuka/mengunduh media, dan menyalin caption.
+  Input/edit/hapus hanya `admin_uid`/`administrator` (UID).
+- Koleksi Firestore baru `posting_plans`: `tanggal`, `judul`, `caption`, `mediaPaths[]`, `mediaNames[]`.
+  API: `GET/POST /api/posting-plans`, `PATCH/DELETE /api/posting-plans/[id]`. GET semua role (filter
+  `?bulan=YYYY-MM`); tulis admin. Maks 10 media/rencana, caption 10.000 karakter.
+- Media disimpan di PC storage (`posting-plans/...`). Dukungan **video MP4/MOV sampai 100 MB**
+  (gambar tetap dikompres); fitur lain tetap 10 MB lewat override per koleksi di `mediaRules`
+  (`allowedMime`/`maxBytes`). `mediaClient.uploadMediaFile` menerima `limits`.
+- **Perlu restart service media di PC** (bukan reboot): `server.mjs` ditambah MIME video dan
+  `D:\media-store\config.env` `MEDIA_MAX_BYTES=104857600`. Dari PowerShell **admin**:
+  `schtasks /end /tn MediaStore; schtasks /run /tn MediaStore`. Tanpa restart, upload video ditolak
+  415/413; upload gambar tetap jalan.
+- Uji API **19/19 PASS** (13 CRUD/permission rencana + 6 media): 401 tanpa token, TL hanya baca
+  (POST/PATCH/DELETE 403), validasi tanggal/path, filter bulan, MP4 50 MB diterima, >100 MB & PDF
+  ditolak, download media kosong 404, data uji dibersihkan. `tsc` + `next build` lolos (29 Okt).
+- **Belum**: restart service media, deploy, dan uji klik/upload media di browser. Upload hanya bisa
+  dari origin `https://uid-navy.vercel.app` (production), jadi uji setelah merge/deploy.
+
 ## Bukti uji produksi 23 Okt (PUMK kunjungan)
 - Dokumen `pumk_visits/T9bqTNm0BjsUZk9NUl7W`, unit `uid`, status `draft`.
 - `formOPath` 283.407 B (`%PDF-1.7`), `buktiBayarPath` 675.998 B (`%PDF-1.4`); keduanya `%%EOF` valid.
@@ -124,24 +148,30 @@
   daftar "Kegiatan tersimpan" + buka bukti bertoken.
 
 ## Sisa pekerjaan
-1. Buat PR → merge `72177b9` + `9736300` + `03089d6` + `08a0319` + `4e2eca5`, lalu uji klik UI target
-   massal (banyak NO ID per unit, Semua unit + Pilih unit) dan Database PUMK di production; pastikan menu
-   **PUMK → Database PUMK** hanya tampil untuk Admin UID/super admin.
-2. Uji alur kunjungan dengan 3 akun: staff (buat draf), TL (edit + ajukan, tanpa tombol Setujui/Tolak),
+1. Buat PR → merge `72177b9` + `9736300` + `03089d6` + `08a0319` + `4e2eca5` + `1be99a2` + `6befdcc`,
+   lalu uji klik UI target massal (banyak NO ID per unit, Semua unit + Pilih unit) dan Database PUMK di
+   production; pastikan menu **PUMK → Database PUMK** hanya tampil untuk Admin UID/super admin.
+2. Setelah merge/deploy: restart service media di PC (PowerShell admin:
+   `schtasks /end /tn MediaStore; schtasks /run /tn MediaStore`), lalu uji **Medsos → Rencana Postingan UP**
+   dengan akun UID (tambah rencana + upload gambar & video) dan akun unit (lihat/buka/unduh/salin caption,
+   tanpa tombol tambah/edit/hapus). Cek juga tombol **Sync Sekarang** muncul di TL/staff/asman.
+3. Uji alur kunjungan dengan 3 akun: staff (buat draf), TL (edit + ajukan, tanpa tombol Setujui/Tolak),
    Asman (Setujui/Tolak). Cek laporan unit lain tidak terlihat dan laporan approved terlihat di UID.
-3. Uji unggah 1 PDF + 1 gambar di 4 surface production (draf konten, draf press release, EVP,
+4. Uji unggah 1 PDF + 1 gambar di 4 surface production (draf konten, draf press release, EVP,
    stakeholder realisasi) — kode sudah live via PR #18/#19.
-4. `stakeholder/review` + `evaluasi` masih MOCK → sambungkan ke API transisi yang ada.
-5. Halaman edit EVP agar eviden bisa diganti selama draf.
-6. Publish `firestore.rules` blok `pumk_targets` + `pumk_database` (Console); SMTP produksi; migrasi
+5. `stakeholder/review` + `evaluasi` masih MOCK → sambungkan ke API transisi yang ada.
+6. Halaman edit EVP agar eviden bisa diganti selama draf.
+7. Publish `firestore.rules` blok `pumk_targets` + `pumk_database` (Console); SMTP produksi; migrasi
    Monitoring PUMK lama agar membaca `pumk_database` (bukan sheet); rekap agregat PUMK lintas unit.
-7. Keputusan tertunda: duplikat demo pakai data sama (A) atau Firebase project terpisah (B, rekomendasi);
+8. Keputusan tertunda: duplikat demo pakai data sama (A) atau Firebase project terpisah (B, rekomendasi);
    `NOTULENSI.md` restore atau hapus.
 
 ## Perintah & catatan
 - tsc: `cd monitoring-app; node node_modules\typescript\bin\tsc --noEmit` (npx diblokir ExecutionPolicy).
 - build: `node node_modules\next\dist\bin\next build`; lint: `node node_modules\eslint\bin\eslint.js`.
 - Health: `Invoke-RestMethod https://wellsam.tail328a49.ts.net/health`.
+- Restart service media (PowerShell admin): `schtasks /end /tn MediaStore; schtasks /run /tn MediaStore`
+  (tanpa reboot PC; wajib setelah ubah `server.mjs`/`config.env`).
 - Chrome minta "Access other devices on your local network" (Funnel → `100.109.228.68`): pilih Allow.
 - Bandwidth PC bukan hambatan (~340 Mbps down, ~325 Mbps up paralel). Repo lama `D:\Magang2\Magang` BEKU;
   Firebase aktif `offering-uid`; `master` lokal basi, acuan `origin/master`.
