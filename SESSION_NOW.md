@@ -88,15 +88,16 @@
 - Media disimpan di PC storage (`posting-plans/...`). Dukungan **video MP4/MOV sampai 100 MB**
   (gambar tetap dikompres); fitur lain tetap 10 MB lewat override per koleksi di `mediaRules`
   (`allowedMime`/`maxBytes`). `mediaClient.uploadMediaFile` menerima `limits`.
-- **Perlu restart service media di PC** (bukan reboot): `server.mjs` ditambah MIME video dan
-  `D:\media-store\config.env` `MEDIA_MAX_BYTES=104857600`. Dari PowerShell **admin**:
-  `schtasks /end /tn MediaStore; schtasks /run /tn MediaStore`. Tanpa restart, upload video ditolak
-  415/413; upload gambar tetap jalan.
+- **Service media PC sudah direstart 29 Okt 09:52** (Scheduled Task `MediaStore`, uptime health 5 dtk;
+  `server.mjs` + `config.env` `MEDIA_MAX_BYTES=104857600` aktif). Tidak perlu reboot PC.
 - Uji API **19/19 PASS** (13 CRUD/permission rencana + 6 media): 401 tanpa token, TL hanya baca
   (POST/PATCH/DELETE 403), validasi tanggal/path, filter bulan, MP4 50 MB diterima, >100 MB & PDF
   ditolak, download media kosong 404, data uji dibersihkan. `tsc` + `next build` lolos (29 Okt).
-- **Belum**: restart service media, deploy, dan uji klik/upload media di browser. Upload hanya bisa
-  dari origin `https://uid-navy.vercel.app` (production), jadi uji setelah merge/deploy.
+- Uji E2E lokal **10/10 PASS** setelah restart: UID buat rencana, upload gambar + video MP4 ke PC,
+  simpan media, TL melihat, unduh gambar (70 B) + video (32 B) byte utuh (SHA-256 sama), hapus rencana.
+  Koleksi `posting_plans` kembali 0 dokumen; file uji dibersihkan.
+- **Belum**: deploy, lalu uji klik/upload media di browser production. Upload browser hanya bisa dari
+  origin `https://uid-navy.vercel.app` (production), jadi uji setelah merge/deploy.
 
 ## Bukti uji produksi 23 Okt (PUMK kunjungan)
 - Dokumen `pumk_visits/T9bqTNm0BjsUZk9NUl7W`, unit `uid`, status `draft`.
@@ -151,9 +152,8 @@
 1. Buat PR → merge `72177b9` + `9736300` + `03089d6` + `08a0319` + `4e2eca5` + `1be99a2` + `6befdcc`,
    lalu uji klik UI target massal (banyak NO ID per unit, Semua unit + Pilih unit) dan Database PUMK di
    production; pastikan menu **PUMK → Database PUMK** hanya tampil untuk Admin UID/super admin.
-2. Setelah merge/deploy: restart service media di PC (PowerShell admin:
-   `schtasks /end /tn MediaStore; schtasks /run /tn MediaStore`), lalu uji **Medsos → Rencana Postingan UP**
-   dengan akun UID (tambah rencana + upload gambar & video) dan akun unit (lihat/buka/unduh/salin caption,
+2. Setelah merge/deploy: uji **Medsos → Rencana Postingan UP** dengan akun UID (tambah rencana +
+   upload gambar & video) dan akun unit (lihat/buka/unduh/salin caption,
    tanpa tombol tambah/edit/hapus). Cek juga tombol **Sync Sekarang** muncul di TL/staff/asman.
 3. Uji alur kunjungan dengan 3 akun: staff (buat draf), TL (edit + ajukan, tanpa tombol Setujui/Tolak),
    Asman (Setujui/Tolak). Cek laporan unit lain tidak terlihat dan laporan approved terlihat di UID.
