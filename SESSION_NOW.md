@@ -3,16 +3,17 @@
 > Baca file ini saja saat membuka sesi baru. Detail historis: `SESSION_RESUME.md` (jangan dibaca penuh).
 
 ## Posisi sekarang
-- Branch `feat-draft-internal-storage` @ `08a0319`, sudah di-push. `origin/master` @ `34f15fd`
+- Branch `feat-draft-internal-storage` @ `4e2eca5`, sudah di-push. `origin/master` @ `34f15fd`
   (merge PR #19; seluruh surface media sudah live).
-- **Empat commit belum di-merge**: `72177b9` (target massal) + `9736300` (banyak NO ID per unit) +
-  `03089d6` (Database PUMK internal) + `08a0319` (menu Database PUMK pindah ke dropdown PUMK). Langkah user:
+- **Lima commit belum di-merge**: `72177b9` (target massal) + `9736300` (banyak NO ID per unit) +
+  `03089d6` (Database PUMK internal) + `08a0319` (menu Database PUMK pindah ke dropdown PUMK) +
+  `4e2eca5` (alur persetujuan kunjungan: Asman approve, TL edit/ajukan). Langkah user:
   `https://github.com/WELLSAM16/UID/compare/master...feat-draft-internal-storage?expand=1`
   judul saran: "PUMK: target massal, banyak mitra/unit, database internal".
 - Sudah live & terbukti di production: **PUMK kunjungan** (bukti uji 23 Okt di bawah) + seluruh
   surface media (draf konten, draf press release, EVP, stakeholder realisasi) via PR #18/#19.
 - `tsc --noEmit` EXIT 0, `eslint` file terkait EXIT 0 (hanya warning `<img>` lama di Sidebar),
-  `next build` EXIT 0 (28 Okt, termasuk setelah `08a0319`). Working tree: `M SESSION_RESUME.md`,
+  `next build` EXIT 0 (29 Okt, termasuk setelah `4e2eca5`). Working tree: `M SESSION_RESUME.md`,
   `D NOTULENSI.md`, `?? monitoring-app/docs/` (jangan sentuh). `gh` CLI tidak ada → cek PR via API.
 
 ## Sesi 26–28 Okt — target PUMK massal (`72177b9` + `9736300`)
@@ -57,6 +58,21 @@
   normalisasi UP2D, create, duplikat 409, URL salah 400, patch, bentrok NO ID 409, GET terbaru,
   delete + total kembali 363. Data uji dibersihkan.
 - **Belum**: uji klik UI di browser dan uji input folder manual oleh user.
+
+## Sesi 29 Okt — alur persetujuan kunjungan PUMK (`4e2eca5`)
+- Alur per unit: staff/TL isi laporan → draf → **TL edit & ajukan ke Asman** → **Asman setujui/tolak** →
+  yang disetujui "naik ke UID" (admin_uid/administrator melihat semua unit di halaman yang sama).
+- Hak aksi dropdown: TL se-unit hanya **Edit** + **Ajukan ke Asman** (draft/ditolak); Asman se-unit
+  hanya **Setujui** + **Tolak** untuk laporan `pending`. TL tidak bisa approve/reject; admin juga tidak
+  menyetujui (hanya bisa edit/koreksi + hapus). Penulis tetap bisa edit draf/ditolak & ajukan sendiri.
+- API `PATCH /api/pumk-visits/[id]`: `canReview` = Asman se-unit bukan penulis; `canEditVisit` =
+  admin, penulis draft/ditolak, atau TL se-unit draft/ditolak; `submit` menerima draft **dan** rejected
+  (resubmit setelah ditolak), mereset `reviewNote/reviewedBy/reviewedAt`. File bukti boleh diubah saat
+  draft/ditolak, terkunci saat pending/approved.
+- UI: tambah modal **Edit Laporan** (tanggal, NO ID, mitra, kolektibilitas, saldo, jenis, lokasi/kondisi)
+  + opsi dropdown; status `pending` menjadi "Menunggu Asman"; catatan penolakan tampil di modal edit.
+  Filter unit di API tetap: role unit hanya melihat laporan unitnya sendiri.
+- `tsc --noEmit` + `next build` lolos (29 Okt). **Belum** uji API/klik browser dengan akun TL & Asman.
 
 ## Bukti uji produksi 23 Okt (PUMK kunjungan)
 - Dokumen `pumk_visits/T9bqTNm0BjsUZk9NUl7W`, unit `uid`, status `draft`.
@@ -108,16 +124,18 @@
   daftar "Kegiatan tersimpan" + buka bukti bertoken.
 
 ## Sisa pekerjaan
-1. Buat PR → merge `72177b9` + `9736300` + `03089d6` + `08a0319`, lalu uji klik UI target massal
-   (banyak NO ID per unit, Semua unit + Pilih unit) dan Database PUMK di production; pastikan menu
+1. Buat PR → merge `72177b9` + `9736300` + `03089d6` + `08a0319` + `4e2eca5`, lalu uji klik UI target
+   massal (banyak NO ID per unit, Semua unit + Pilih unit) dan Database PUMK di production; pastikan menu
    **PUMK → Database PUMK** hanya tampil untuk Admin UID/super admin.
-2. Uji unggah 1 PDF + 1 gambar di 4 surface production (draf konten, draf press release, EVP,
+2. Uji alur kunjungan dengan 3 akun: staff (buat draf), TL (edit + ajukan, tanpa tombol Setujui/Tolak),
+   Asman (Setujui/Tolak). Cek laporan unit lain tidak terlihat dan laporan approved terlihat di UID.
+3. Uji unggah 1 PDF + 1 gambar di 4 surface production (draf konten, draf press release, EVP,
    stakeholder realisasi) — kode sudah live via PR #18/#19.
-3. `stakeholder/review` + `evaluasi` masih MOCK → sambungkan ke API transisi yang ada.
-4. Halaman edit EVP agar eviden bisa diganti selama draf.
-5. Publish `firestore.rules` blok `pumk_targets` + `pumk_database` (Console); SMTP produksi; migrasi
+4. `stakeholder/review` + `evaluasi` masih MOCK → sambungkan ke API transisi yang ada.
+5. Halaman edit EVP agar eviden bisa diganti selama draf.
+6. Publish `firestore.rules` blok `pumk_targets` + `pumk_database` (Console); SMTP produksi; migrasi
    Monitoring PUMK lama agar membaca `pumk_database` (bukan sheet); rekap agregat PUMK lintas unit.
-6. Keputusan tertunda: duplikat demo pakai data sama (A) atau Firebase project terpisah (B, rekomendasi);
+7. Keputusan tertunda: duplikat demo pakai data sama (A) atau Firebase project terpisah (B, rekomendasi);
    `NOTULENSI.md` restore atau hapus.
 
 ## Perintah & catatan
