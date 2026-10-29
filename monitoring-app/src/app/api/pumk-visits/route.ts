@@ -82,6 +82,8 @@ export async function POST(request: Request) {
     formOName: s(body.formOName) || null,
     dokumenLainPath: s(body.dokumenLainPath) || null,
     dokumenLainName: s(body.dokumenLainName) || null,
+    evidencePath: s(body.evidencePath) || null,
+    evidenceName: s(body.evidenceName) || null,
     buktiBayarPath: s(body.buktiBayarPath) || null,
     buktiBayarName: s(body.buktiBayarName) || null,
     status: "draft",

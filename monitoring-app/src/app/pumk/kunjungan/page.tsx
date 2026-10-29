@@ -31,6 +31,8 @@ interface Visit {
   formOName?: string | null;
   dokumenLainPath?: string | null;
   dokumenLainName?: string | null;
+  evidencePath?: string | null;
+  evidenceName?: string | null;
   buktiBayarPath?: string | null;
   buktiBayarName?: string | null;
   status: string;
@@ -70,6 +72,10 @@ const hintStyle: React.CSSProperties = {
   color: "var(--text-muted)",
   marginTop: "4px",
 };
+
+/** Foto evidence: hanya gambar (bukan PDF). */
+const EVIDENCE_MIME = ["image/jpeg", "image/png", "image/webp"] as const;
+const EVIDENCE_LIMITS = { allowedMime: EVIDENCE_MIME };
 
 /**
  * Satu field dalam grid 12 kolom.
@@ -123,6 +129,7 @@ export default function PumkKunjunganPage() {
   const [formOFile, setFormOFile] = useState<File | null>(null);
   const [dokumenLainFile, setDokumenLainFile] = useState<File | null>(null);
   const [buktiBayarFile, setBuktiBayarFile] = useState<File | null>(null);
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
 
@@ -131,6 +138,7 @@ export default function PumkKunjunganPage() {
   const [atFormO, setAtFormO] = useState<File | null>(null);
   const [atDokLain, setAtDokLain] = useState<File | null>(null);
   const [atBukti, setAtBukti] = useState<File | null>(null);
+  const [atEvidence, setAtEvidence] = useState<File | null>(null);
   const [attaching, setAttaching] = useState(false);
 
   // Edit laporan (TL se-unit / admin) — data teks, file tetap lewat "Lampirkan file".
@@ -200,7 +208,7 @@ export default function PumkKunjunganPage() {
     setNoId(""); setNamaMitra(""); setKolektibilitas("Masalah");
     setSaldoPokok(""); setSaldoJasa(""); setTotalSaldo("");
     setJenis("Inventarisasi"); setLokasiUrl(""); setKondisiMitra("");
-    setFormOFile(null); setDokumenLainFile(null); setBuktiBayarFile(null);
+    setFormOFile(null); setDokumenLainFile(null); setBuktiBayarFile(null); setEvidenceFile(null);
   };
 
   const fileLabel = (f: File | null) =>
@@ -224,12 +232,13 @@ export default function PumkKunjunganPage() {
     }
 
     // Kumpulkan file yang dipilih -> dipetakan ke field dokumen.
-    const files: { field: string; nameField: string; file: File; label: string }[] = [];
+    const files: { field: string; nameField: string; file: File; label: string; limits?: { allowedMime: readonly string[] } }[] = [];
+    if (evidenceFile) files.push({ field: "evidencePath", nameField: "evidenceName", file: evidenceFile, label: "Foto bukti kunjungan", limits: EVIDENCE_LIMITS });
     if (formOFile) files.push({ field: "formOPath", nameField: "formOName", file: formOFile, label: "Form O" });
     if (dokumenLainFile) files.push({ field: "dokumenLainPath", nameField: "dokumenLainName", file: dokumenLainFile, label: "Dokumen lain" });
     if (buktiBayarFile) files.push({ field: "buktiBayarPath", nameField: "buktiBayarName", file: buktiBayarFile, label: "Bukti pembayaran" });
     for (const f of files) {
-      const ferr = validateMediaFile(f.file);
+      const ferr = validateMediaFile(f.file, f.limits);
       if (ferr) {
         setError(`${f.label}: ${ferr}`);
         return;
@@ -308,12 +317,16 @@ export default function PumkKunjunganPage() {
 
   const handleAction = async (v: Visit, action: string) => {
     if (action === "attach") {
-      setAtFormO(null); setAtDokLain(null); setAtBukti(null);
+      setAtFormO(null); setAtDokLain(null); setAtBukti(null); setAtEvidence(null);
       setAttachFor(v);
       return;
     }
     if (action === "edit") {
       openEdit(v);
+      return;
+    }
+    if (action === "submit" && !v.evidencePath) {
+      setError("Unggah foto bukti kunjungan dulu lewat menu \"Lampirkan file\" sebelum mengajukan.");
       return;
     }
     let note: string | undefined;
@@ -345,7 +358,8 @@ export default function PumkKunjunganPage() {
   const handleAttach = async () => {
     const v = attachFor;
     if (!v) return;
-    const jobs: { field: string; nameField: string; file: File; label: string }[] = [];
+    const jobs: { field: string; nameField: string; file: File; label: string; limits?: { allowedMime: readonly string[] } }[] = [];
+    if (atEvidence) jobs.push({ field: "evidencePath", nameField: "evidenceName", file: atEvidence, label: "Foto bukti kunjungan", limits: EVIDENCE_LIMITS });
     if (atFormO) jobs.push({ field: "formOPath", nameField: "formOName", file: atFormO, label: "Form O" });
     if (atDokLain) jobs.push({ field: "dokumenLainPath", nameField: "dokumenLainName", file: atDokLain, label: "Dokumen lain" });
     if (atBukti) jobs.push({ field: "buktiBayarPath", nameField: "buktiBayarName", file: atBukti, label: "Bukti pembayaran" });
@@ -354,7 +368,7 @@ export default function PumkKunjunganPage() {
       return;
     }
     for (const j of jobs) {
-      const ferr = validateMediaFile(j.file);
+      const ferr = validateMediaFile(j.file, j.limits);
       if (ferr) {
         setError(`${j.label}: ${ferr}`);
         return;
@@ -575,6 +589,12 @@ export default function PumkKunjunganPage() {
             </div>
           )}
 
+          <div className="kunj-grid" style={{ marginTop: "12px" }}>
+            <Field label="Foto bukti kunjungan (wajib saat diajukan)" span={6} hint={evidenceFile ? fileLabel(evidenceFile) : "Ambil foto saat berada di lokasi mitra (JPG/PNG/WebP)"}>
+              <input className="input-field" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)} />
+            </Field>
+          </div>
+
           <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={handleCreate} disabled={saving}>
               {saving ? "Menyimpan..." : "Simpan draf"}
@@ -586,6 +606,7 @@ export default function PumkKunjunganPage() {
           <p style={{ marginTop: "12px", fontSize: "0.8rem", color: "var(--text-muted)" }}>
             Nomor ID mengacu ke Database PUMK (master read-only). File diunggah ke penyimpanan internal
             (PDF/JPG/PNG/WebP, maks 10 MB); gambar diperkecil otomatis sebelum dikirim.
+            Foto bukti kunjungan hanya menerima gambar dan wajib ada sebelum laporan diajukan ke Asman.
           </p>
         </section>
       )}
@@ -631,6 +652,11 @@ export default function PumkKunjunganPage() {
                   <td style={{ padding: "10px 12px" }}>
                     <div>{v.namaMitra}</div>
                     <div style={{ marginTop: "4px", display: "flex", gap: "10px", flexWrap: "wrap", fontSize: "0.75rem" }}>
+                      {v.evidencePath && (
+                        <button type="button" onClick={() => openFile(v, "evidencePath")} title={v.evidenceName || "Foto bukti kunjungan"} style={fileBtn}>
+                          Foto kunjungan
+                        </button>
+                      )}
                       {v.formOPath && (
                         <button type="button" onClick={() => openFile(v, "formOPath")} title={v.formOName || "Form O"} style={fileBtn}>
                           Form O
@@ -776,6 +802,13 @@ export default function PumkKunjunganPage() {
             </p>
 
             <div style={{ display: "grid", gap: "14px", marginTop: "18px" }}>
+              <div>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Foto bukti kunjungan</label>
+                <input className="input-field" type="file" accept="image/jpeg,image/png,image/webp" disabled={attaching} onChange={(e) => setAtEvidence(e.target.files?.[0] || null)} />
+                <div style={hintStyle}>
+                  {atEvidence ? atEvidence.name : attachFor.evidenceName ? `Tersimpan: ${attachFor.evidenceName}` : "Belum ada foto (wajib sebelum diajukan)"}
+                </div>
+              </div>
               <div>
                 <label style={{ display: "block", marginBottom: "6px", fontSize: "0.85rem", fontWeight: 600 }}>Form O</label>
                 <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" disabled={attaching} onChange={(e) => setAtFormO(e.target.files?.[0] || null)} />

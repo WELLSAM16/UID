@@ -75,21 +75,19 @@ export async function POST(request: Request) {
   const filename = String(body.filename || "").trim();
   const size = Number(body.size);
   const mime = String(body.mime || "").toLowerCase();
-  const allowedMime = rule.allowedMime ?? MEDIA_ALLOWED_MIME;
+  const allowedMime = fieldRule.allowedMime ?? rule.allowedMime ?? MEDIA_ALLOWED_MIME;
   const maxBytes = rule.maxBytes ?? MEDIA_MAX_BYTES;
 
   if (!filename || filename.length > 200) {
     return NextResponse.json({ error: "nama file tidak valid" }, { status: 400 });
   }
   if (!allowedMime.includes(mime)) {
-    return NextResponse.json(
-      {
-        error: allowedMime.includes("video/mp4")
-          ? "File harus gambar (JPG/PNG/WebP) atau video (MP4/MOV)"
-          : "File harus PDF atau gambar (JPG/PNG/WebP)",
-      },
-      { status: 400 }
-    );
+    const hint = allowedMime.includes("video/mp4")
+      ? "File harus gambar (JPG/PNG/WebP) atau video (MP4/MOV)"
+      : allowedMime.includes("application/pdf")
+        ? "File harus PDF atau gambar (JPG/PNG/WebP)"
+        : "File harus gambar (JPG/PNG/WebP)";
+    return NextResponse.json({ error: hint }, { status: 400 });
   }
   if (!Number.isInteger(size) || size <= 0 || size > maxBytes) {
     return NextResponse.json(

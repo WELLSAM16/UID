@@ -60,6 +60,9 @@ export interface PumkVisit {
   formOName?: string | null;
   dokumenLainPath?: string | null;
   dokumenLainName?: string | null;
+  /** Foto bukti kunjungan ke mitra (wajib sebelum diajukan). */
+  evidencePath?: string | null;
+  evidenceName?: string | null;
   // --- Cabang Penagihan ---
   /** LEGACY: link bukti pembayaran piutang. */
   buktiBayarUrl?: string | null;
@@ -135,6 +138,8 @@ export function validatePumkVisit(input: {
   formOName?: unknown;
   dokumenLainPath?: unknown;
   dokumenLainName?: unknown;
+  evidencePath?: unknown;
+  evidenceName?: unknown;
   buktiBayarPath?: unknown;
   buktiBayarName?: unknown;
 }): ValidationResult {
@@ -160,10 +165,12 @@ export function validatePumkVisit(input: {
 
   if (!isStoragePathOrEmpty(input.formOPath)) return { ok: false, error: "formOPath tidak valid" };
   if (!isStoragePathOrEmpty(input.dokumenLainPath)) return { ok: false, error: "dokumenLainPath tidak valid" };
+  if (!isStoragePathOrEmpty(input.evidencePath)) return { ok: false, error: "evidencePath tidak valid" };
   if (!isStoragePathOrEmpty(input.buktiBayarPath)) return { ok: false, error: "buktiBayarPath tidak valid" };
   for (const [key, val] of [
     ["formOName", input.formOName],
     ["dokumenLainName", input.dokumenLainName],
+    ["evidenceName", input.evidenceName],
     ["buktiBayarName", input.buktiBayarName],
   ] as const) {
     if (val !== undefined && val !== null && String(val).length > 120)
