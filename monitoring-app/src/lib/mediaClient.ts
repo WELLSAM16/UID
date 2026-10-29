@@ -94,7 +94,7 @@ function putWithProgress(
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url, true);
     xhr.setRequestHeader("Content-Type", mime);
-    xhr.timeout = 180_000;
+    xhr.timeout = 600_000;
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
         onProgress(Math.min(99, Math.round((e.loaded / e.total) * 100)));
@@ -135,14 +135,17 @@ export async function uploadMediaFile(params: {
   target: MediaTarget;
   file: File;
   onProgress?: (percent: number) => void;
+  /** Batas khusus fitur (mis. video rencana postingan). */
+  limits?: { allowedMime?: readonly string[]; maxBytes?: number };
 }): Promise<UploadResult> {
-  const { token, target, onProgress } = params;
+  const { token, target, onProgress, limits } = params;
+  const maxBytes = limits?.maxBytes ?? MEDIA_MAX_BYTES;
 
   const prepared = await compressImageFile(params.file);
-  const invalid = validateMediaFile(prepared);
+  const invalid = validateMediaFile(prepared, limits);
   if (invalid) throw new Error(invalid);
-  if (prepared.size > MEDIA_MAX_BYTES) {
-    throw new Error(`Setelah kompresi masih lebih dari ${MEDIA_MAX_BYTES / 1024 / 1024} MB`);
+  if (prepared.size > maxBytes) {
+    throw new Error(`Setelah kompresi masih lebih dari ${Math.round(maxBytes / 1024 / 1024)} MB`);
   }
 
   const res = await fetch("/api/files/upload-url", {

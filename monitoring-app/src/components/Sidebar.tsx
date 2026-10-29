@@ -38,6 +38,7 @@ const MENUS: MainMenu[] = [
       { name: "Skoring Medsos", href: "/dashboard", icon: "📊", desc: "Live monitoring & ringkasan" },
       { name: "Input Medmas", href: "/dashboard/medmas", icon: "📰", desc: "Pemberitaan media massa", unitOnly: true },
       { name: "Rekap Bulanan", href: "/dashboard/rekap", icon: "📑", desc: "Medmas + Medsos per bulan" },
+      { name: "Rencana Postingan UP", href: "/dashboard/rencana-postingan", icon: "🗓️", desc: "Kalender konten dari UID" },
       { name: "Draf Saya", href: "/dashboard/drafts", icon: "📝", desc: "Buat rencana postingan", unitOnly: true },
       { name: "Review Draf", href: "/admin/drafts", icon: "✅", desc: "Validasi ajuan user", superAdminOnly: true },
       { name: "Kelola Target", href: "/admin/target", icon: "⚙️", desc: "Atur target tiap akun", adminOnly: true },

@@ -7,6 +7,7 @@
  */
 import type { AuthedUser } from "@/lib/authServer";
 import { isAdminRole } from "@/lib/roles";
+import { MEDIA_PLAN_MIME, MEDIA_VIDEO_MAX_BYTES } from "@/lib/mediaShared";
 
 export interface MediaFieldRule {
   /** Sub-folder di PC, mis. "form-o". */
@@ -24,6 +25,10 @@ export interface MediaCollectionRule {
   editableStatuses: string[];
   /** true = akses baca lintas user dalam unit yang sama. */
   unitScoped: boolean;
+  /** Override tipe file yang diterima (default: PDF/gambar). */
+  allowedMime?: readonly string[];
+  /** Override batas ukuran file (default MEDIA_MAX_BYTES = 10 MB). */
+  maxBytes?: number;
   canWrite: (doc: Record<string, any>, user: AuthedUser) => boolean;
   canRead: (doc: Record<string, any>, user: AuthedUser) => boolean;
 }
@@ -108,5 +113,19 @@ export const MEDIA_COLLECTIONS: Record<string, MediaCollectionRule> = {
     },
     canWrite: (doc, user) => ownerEditable(doc, user, ["draft", "revisi_tl"]),
     canRead: ownerUnitOrAdmin,
+  },
+
+  // Rencana postingan UP: UID yang menulis, semua unit boleh membaca/mengunduh.
+  posting_plans: {
+    prefix: "posting-plans",
+    editableStatuses: [],
+    unitScoped: false,
+    fields: {
+      mediaPaths: { folder: "media", label: "Media postingan" },
+    },
+    allowedMime: MEDIA_PLAN_MIME,
+    maxBytes: MEDIA_VIDEO_MAX_BYTES,
+    canWrite: (_doc, user) => isAdminRole(user.role),
+    canRead: () => true,
   },
 };
