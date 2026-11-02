@@ -307,6 +307,8 @@ export default function PumkDatabasePage() {
           <p style={{ margin: "5px 0 0 0", color: "#111", fontSize: "0.9rem", maxWidth: "820px" }}>
             Master mitra PUMK internal. Admin UID dapat menambah, mengubah, dan menghapus data.
             Folder PKS &amp; piutang diisi per mitra. Halaman ini tidak membuka akses ke Google Sheet.
+            Unit penanggung jawab bisa diubah satu per satu di sini, atau sekaligus lewat
+            <b> PUMK → Target PUMK</b> (pilih mitra per unit).
           </p>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>

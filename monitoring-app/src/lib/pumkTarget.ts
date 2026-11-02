@@ -17,6 +17,12 @@ import { normalizeUnitId } from "./roles";
 
 export type PumkTargetStatus = "Active" | "Paused";
 
+/** Snapshot mitra yang ditetapkan ke unit (diambil dari `pumk_database`). */
+export interface PumkAssignedMitra {
+  noId: string;
+  nama: string;
+}
+
 export interface PumkTarget {
   id?: string;
   /** Unit pelaksana, cth "UP3 BINTARO", "UP2D" (bukan "UID"). */
@@ -31,6 +37,8 @@ export interface PumkTarget {
   targetMitra: number;
   /** Daftar NO ID mitra yang ditangani (opsional). */
   assignedNoIds?: string[];
+  /** Nama mitra saat ditetapkan (snapshot dari `pumk_database`). */
+  assignedMitra?: PumkAssignedMitra[];
   status: PumkTargetStatus;
   createdBy?: string;
   createdByEmail?: string;
@@ -147,6 +155,11 @@ export function validatePumkTarget(input: {
 /** Normalisasi daftar No ID (trim, buang kosong, dedup case-insensitive). */
 export function normalizeAssignedNoIds(input: unknown): string[] {
   return parseAssigned(input) || [];
+}
+
+/** Kunci pencocokan NO ID ke `pumk_database` (uppercase, trim). */
+export function normalizeNoIdKey(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
 }
 
 /** Kunci unik target aktif: satu baris Active per (unitId, tahun). */
