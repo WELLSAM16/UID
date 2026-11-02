@@ -15,6 +15,10 @@
 - `tsc --noEmit` EXIT 0, `eslint` file terkait EXIT 0 (hanya warning `<img>` lama di Sidebar),
   `next build` EXIT 0 (29 Okt, termasuk setelah `60b2845`). Working tree: `M SESSION_RESUME.md`,
   `D NOTULENSI.md`, `?? monitoring-app/docs/` (jangan sentuh). `gh` CLI tidak ada → cek PR via API.
+- Branch kerja saat ini: **`feat-pumk-target-database`** @ `4e6a81f` ("feat(pumk): monitoring pumk
+  pindah ke database internal", 2 Nov). Merangkai: `c1f5331` Set Target ↔ `pumk_database` +
+  `4e6a81f` Monitoring PUMK ↔ `pumk_database`. Belum di-merge ke master / belum di-deploy production;
+  push branch memicu Vercel build preview baru (status deploy 4e6a81f belum muncul saat dicek).
 
 ## Verifikasi 2 Nov — posisi Vercel
 - Dicek dari shell tanpa dashboard Vercel (tidak ada `vercel` CLI / `VERCEL_TOKEN`):
