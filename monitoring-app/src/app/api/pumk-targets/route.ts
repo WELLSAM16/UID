@@ -4,9 +4,19 @@ import { requireAdmin, requireUser } from "@/lib/authServer";
 import { normalizeUnitId } from "@/lib/roles";
 import {
   normalizeAssignedNoIds,
+  normalizeNoIdKey,
   validatePumkTarget,
   type PumkTarget,
 } from "@/lib/pumkTarget";
+import {
+  PumkAssignError,
+  describeNoIds,
+  readPumkDbIndexTx,
+  resolveAssignedMitra,
+  syncPumkDbUnits,
+  type PumkDbIndex,
+  type PumkDbIndexEntry,
+} from "@/lib/pumkTargetDb";
 
 const COLLECTION = "pumk_targets";
 
@@ -14,11 +24,15 @@ function toResponse(id: string, data: FirebaseFirestore.DocumentData) {
   return { id, ...(data as PumkTarget) };
 }
 
-async function readBody(request: NextRequest): Promise<any> {
+async function readBody(request: NextRequest): Promise<Record<string, unknown> | null> {
   try {
     const text = await request.text();
     if (!text) return {};
-    return JSON.parse(text);
+    const parsed: unknown = JSON.parse(text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -52,10 +66,13 @@ export async function GET(request: NextRequest) {
         : b.tahun.localeCompare(a.tahun)
     );
     return NextResponse.json({ targets: items });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("GET /api/pumk-targets error:", err);
     return NextResponse.json(
-      { error: "Gagal memuat target PUMK", details: err?.message },
+      {
+        error: "Gagal memuat target PUMK",
+        details: err instanceof Error ? err.message : String(err),
+      },
       { status: 500 }
     );
   }
@@ -66,6 +83,9 @@ export async function GET(request: NextRequest) {
  * Body: { unitId, tahun, targetInventarisasi, targetRupiahKembali,
  *         targetMitra, assignedNoIds?, status? }
  * Unik: satu baris Active per (unitId, tahun).
+ *
+ * assignedNoIds wajib berisi NO ID yang terdaftar di `pumk_database`.
+ * Mitra yang dipilih juga diset `unitId`-nya di database.
  */
 export async function POST(request: NextRequest) {
   const { response, user } = await requireAdmin(request);
@@ -83,50 +103,137 @@ export async function POST(request: NextRequest) {
   const unitId = normalizeUnitId(String(body.unitId))!;
   const tahun = String(body.tahun).trim();
   const status = body.status === "Paused" ? "Paused" : "Active";
+  const requestedIds = normalizeAssignedNoIds(body.assignedNoIds);
+
+  const db = getAdminDb();
+  let index: PumkDbIndex | null = null;
+  let assignedEntries: PumkDbIndexEntry[] = [];
+  let createdId = "";
+  let doc: PumkTarget | null = null;
 
   try {
-    const db = getAdminDb();
-    if (status === "Active") {
-      const dup = await db
-        .collection(COLLECTION)
-        .where("unitId", "==", unitId)
-        .where("tahun", "==", tahun)
-        .where("status", "==", "Active")
-        .limit(1)
-        .get();
-      if (!dup.empty) {
-        return NextResponse.json(
-          { error: `Target aktif ${unitId} tahun ${tahun} sudah ada. Edit baris tersebut.` },
-          { status: 409 }
-        );
-      }
-    }
+    await db.runTransaction(async (tx) => {
+      // Semua read sebelum write.
+      const dbIndex = await readPumkDbIndexTx(tx, db);
+      const snap = await tx.get(db.collection(COLLECTION).where("tahun", "==", tahun));
 
-    const t = new Date().toISOString();
-    const doc: PumkTarget = {
-      unitId,
-      tahun,
-      targetInventarisasi: Math.trunc(Number(body.targetInventarisasi)),
-      targetRupiahKembali: Number(body.targetRupiahKembali),
-      targetMitra: Math.trunc(Number(body.targetMitra)),
-      assignedNoIds: normalizeAssignedNoIds(body.assignedNoIds),
-      status,
-      createdBy: u.uid,
-      createdByEmail: u.email,
-      createdAt: t,
-      updatedAt: t,
-    };
-    const ref = await db.collection(COLLECTION).add(doc);
-    const fresh = await ref.get();
-    return NextResponse.json(
-      { target: toResponse(ref.id, fresh.data()!) },
-      { status: 201 }
-    );
-  } catch (err: any) {
+      if (status === "Active") {
+        const dup = snap.docs.find((d) => {
+          const data = d.data() as Record<string, unknown>;
+          return (
+            data.status === "Active" &&
+            normalizeUnitId(String(data.unitId || "")) === unitId
+          );
+        });
+        if (dup) {
+          throw new PumkAssignError(409, {
+            error: `Target aktif ${unitId} tahun ${tahun} sudah ada. Edit baris tersebut.`,
+          });
+        }
+      }
+
+      // Satu mitra hanya boleh dipegang satu unit per tahun.
+      const claimed = new Map<string, string>();
+      for (const d of snap.docs) {
+        const data = d.data() as Record<string, unknown>;
+        if (data.status !== "Active") continue;
+        const otherUnit = String(data.unitId || "");
+        if (!otherUnit || otherUnit === unitId) continue;
+        for (const raw of Array.isArray(data.assignedNoIds) ? data.assignedNoIds : []) {
+          claimed.set(normalizeNoIdKey(raw), otherUnit);
+        }
+      }
+      const conflicts = requestedIds
+        .map((id) => ({ noId: id, unitId: claimed.get(normalizeNoIdKey(id)) || "" }))
+        .filter((c) => c.unitId);
+      if (conflicts.length > 0) {
+        throw new PumkAssignError(409, {
+          error:
+            `${conflicts.length} NO ID sudah ditargetkan ke unit lain tahun ${tahun}: ` +
+            conflicts
+              .slice(0, 5)
+              .map((c) => `${c.noId} (${c.unitId})`)
+              .join(", "),
+          conflicts,
+        });
+      }
+
+      const resolved = resolveAssignedMitra(requestedIds, dbIndex);
+      if (resolved.unknown.length > 0) {
+        throw new PumkAssignError(400, {
+          error:
+            `${resolved.unknown.length} NO ID tidak ada di database PUMK: ` +
+            `${describeNoIds(resolved.unknown)}. Tambahkan mitra tersebut di menu Database PUMK dulu.`,
+          unknownNoIds: resolved.unknown,
+        });
+      }
+
+      const canonicalIds = resolved.assigned.map((m) => m.noId);
+      index = dbIndex;
+      assignedEntries = canonicalIds
+        .map((id) => dbIndex.get(normalizeNoIdKey(id)))
+        .filter((e): e is PumkDbIndexEntry => Boolean(e));
+
+      const t = new Date().toISOString();
+      doc = {
+        unitId,
+        tahun,
+        targetInventarisasi: Number(body.targetInventarisasi),
+        targetRupiahKembali: Number(body.targetRupiahKembali),
+        targetMitra: Math.trunc(Number(body.targetMitra)),
+        assignedNoIds: canonicalIds,
+        assignedMitra: resolved.assigned,
+        status,
+        createdBy: u.uid,
+        createdByEmail: u.email,
+        createdAt: t,
+        updatedAt: t,
+      };
+      const ref = db.collection(COLLECTION).doc();
+      createdId = ref.id;
+      tx.set(ref, doc);
+    });
+  } catch (err: unknown) {
+    if (err instanceof PumkAssignError) {
+      return NextResponse.json(err.payload, { status: err.status });
+    }
     console.error("POST /api/pumk-targets error:", err);
     return NextResponse.json(
-      { error: "Gagal membuat target PUMK", details: err?.message },
+      {
+        error: "Gagal membuat target PUMK",
+        details: err instanceof Error ? err.message : String(err),
+      },
       { status: 500 }
     );
   }
+
+  // Target tersimpan; samakan unit penanggung jawab di database mitra.
+  let warning: string | undefined;
+  let dbSync: { assigned: number; cleared: number } | undefined;
+  if (index && assignedEntries.length > 0) {
+    try {
+      dbSync = await syncPumkDbUnits(
+        db,
+        [{ unitId, assigned: assignedEntries, removedKeys: [] }],
+        {
+          index,
+          assignedKeys: new Set(assignedEntries.map((e) => e.noIdKey)),
+          uid: u.uid,
+          email: u.email,
+        }
+      );
+    } catch (err) {
+      console.error("POST /api/pumk-targets db sync error:", err);
+      warning = "Target tersimpan, tetapi unit di Database PUMK gagal diperbarui.";
+    }
+  }
+
+  return NextResponse.json(
+    {
+      target: { id: createdId, ...(doc || {}) },
+      dbSync,
+      ...(warning ? { warning } : {}),
+    },
+    { status: 201 }
+  );
 }

@@ -1,21 +1,73 @@
-# SESSION_NOW — status aktif (28 Okt 2026)
+# SESSION_NOW — status aktif (2 Nov 2026)
 
 > Baca file ini saja saat membuka sesi baru. Detail historis: `SESSION_RESUME.md` (jangan dibaca penuh).
 
-## Posisi sekarang
-- Branch `feat-draft-internal-storage` @ `60b2845`, sudah di-push. `origin/master` @ `34f15fd`
-  (merge PR #19; seluruh surface media sudah live).
-- **Delapan commit belum di-merge**: `72177b9` (target massal) + `9736300` (banyak NO ID per unit) +
-  `03089d6` (Database PUMK internal) + `08a0319` (menu Database PUMK pindah ke dropdown PUMK) +
-  `4e2eca5` (alur persetujuan kunjungan) + `1be99a2` (sync semua role) +
-  `6befdcc` (peta rencana postingan UP) + `60b2845` (foto evidence kunjungan mitra). Langkah user:
-  `https://github.com/WELLSAM16/UID/compare/master...feat-draft-internal-storage?expand=1`
-  judul saran: "PUMK: target massal, banyak mitra/unit, database internal".
-- Sudah live & terbukti di production: **PUMK kunjungan** (bukti uji 23 Okt di bawah) + seluruh
-  surface media (draf konten, draf press release, EVP, stakeholder realisasi) via PR #18/#19.
+## Posisi sekarang (2 Nov 2026)
+- **Semua sudah di-merge dan live.** `origin/master` @ `d6ff9e5` (merge PR #21). PR #20 merged
+  29 Okt 09:58 WIB, PR #21 merged 29 Okt 14:35 WIB. Kesembilan commit branch (`72177b9` … `60b2845`,
+  `32c5d87`) terverifikasi ancestor master. Branch lokal `feat-draft-internal-storage` @ `32c5d87`
+  = ujung yang sudah di-merge (aman dihapus).
+- **Production Vercel** = deployment `7406650724` @ `d6ff9e5`, success 29 Okt 14:35:55 WIB (region `sin1`),
+  domain publik `https://uid-navy.vercel.app`. Tidak ada deploy setelah itu.
+- Sudah live: **PUMK kunjungan** (bukti uji 23 Okt di bawah) + seluruh surface media (draf konten,
+  draf press release, EVP, stakeholder realisasi) via PR #18/#19, plus target massal, Database PUMK,
+  alur persetujuan kunjungan, sync semua role, Rencana Postingan UP, foto evidence (PR #20/#21).
 - `tsc --noEmit` EXIT 0, `eslint` file terkait EXIT 0 (hanya warning `<img>` lama di Sidebar),
   `next build` EXIT 0 (29 Okt, termasuk setelah `60b2845`). Working tree: `M SESSION_RESUME.md`,
   `D NOTULENSI.md`, `?? monitoring-app/docs/` (jangan sentuh). `gh` CLI tidak ada → cek PR via API.
+- Branch kerja saat ini: **`feat-pumk-target-database`** @ `4e6a81f` ("feat(pumk): monitoring pumk
+  pindah ke database internal", 2 Nov). Merangkai: `c1f5331` Set Target ↔ `pumk_database` +
+  `4e6a81f` Monitoring PUMK ↔ `pumk_database`. Belum di-merge ke master / belum di-deploy production;
+  push branch memicu Vercel build preview baru (status deploy 4e6a81f belum muncul saat dicek).
+
+## Verifikasi 2 Nov — posisi Vercel
+- Dicek dari shell tanpa dashboard Vercel (tidak ada `vercel` CLI / `VERCEL_TOKEN`):
+  GitHub Deployments API + probe HTTP ke domain publik.
+- Deployment production terakhir `7406650724` @ `d6ff9e5` (success, 29 Okt 14:35:55 WIB); sebelumnya
+  `cc5d6fe` (merge PR #20, 29 Okt 09:59 WIB). Tidak ada deployment setelah 29 Okt 07:35 UTC.
+- URL deployment `uid-n4i5g4mdu-coba23.vercel.app` dan preview `uid-d18egbuw8-coba23.vercel.app`
+  terproteksi Vercel Authentication (membalas halaman login Vercel, bukan app). Uji selalu lewat
+  `https://uid-navy.vercel.app`.
+- Probe production membuktikan build sudah memuat seluruh route branch: `/api/pumk-targets/bulk` 405,
+  `/api/pumk/database` 401, `/api/posting-plans` 401, `/admin/pumk-database` 200,
+  `/dashboard/rencana-postingan` 200; baseline `/api/zzz-not-exist` 404 (jadi 200/401/405 di atas valid).
+- Media service PC sehat 2 Nov: `ok:true`, 8 file, uptime ±94 jam (sesuai restart 29 Okt 09:52 WIB),
+  433,5 GB bebas.
+
+## Sesi 2 Nov — Set Target terhubung Database PUMK
+- Set Target kini **memilih mitra dari `pumk_database`** (bukan input bebas). Endpoint picker baru
+  `GET /api/pumk/database/lookup` (admin, field ringkas).
+- Aturan: NO ID wajib ada di database (cocok `noIdKey` case-insensitive); nama disimpan kanonik dari
+  database; satu NO ID hanya untuk **satu unit per tahun** (409); input manual NO ID + nama ditolak
+  bila NO ID tidak ada atau nama beda (UI, case-insensitive); NO ID asing ditolak 400 dengan daftar.
+- `unitId` di `pumk_database` **ikut diset massal** saat target disimpan (pengganti edit satu-per-satu
+  di halaman Database PUMK); mitra yang dilepas di-unassign bila unit DB masih unit itu. Sinkronisasi
+  pakai batch 400 di luar transaksi target (tidak kena batas 500 write).
+- API `POST /api/pumk-targets`, `PATCH /[id]`, `POST /bulk` memvalidasi ke database dan menyimpan
+  snapshot `assignedMitra: [{noId, nama}]`; `assignedNoIds` dinormalkan ke penulisan database.
+- UI `/pumk/target`: komponen `PumkMitraPicker` (cari NO ID/nama/unit/kolektibilitas, centang massal,
+  input manual NO ID + nama, tempel banyak ID, penanda "sudah di unit X"), chip mitra + hapus di form
+  tunggal, tombol "Pilih dari database" per baris bulk, peringatan NO ID belum terdaftar.
+- Uji API **21/21 PASS**: lookup, POST/PATCH/bulk valid, NO ID asing 400, bentrok unit 409 (single,
+  bulk, antar-item), unassign saat dilepas, sync unit DB, target tanpa daftar mitra tetap boleh.
+  Data uji tahun 2099 dihapus dan unit DB dikembalikan (363 mitra utuh). `tsc`, `eslint`, `next build`
+  EXIT 0 (2 Nov).
+- **Belum**: uji klik/UX picker di browser setelah deploy.
+
+## Sesi 2 Nov — Monitoring PUMK pindah ke database internal
+- `/api/pumk` sekarang membaca `pumk_database` (Firestore), **bukan Google Sheet/gviz**. Reader sheet
+  `src/lib/pumk.ts` dihapus; helper baru `src/lib/pumkMonitoring.ts` (mapping, KPI, progres TL).
+- Scope unit: staff/TL/Asman hanya melihat unitnya sendiri; admin_uid/administrator melihat semua unit
+  + dropdown (`Semua unit`, per unit, `Belum ditugaskan`). Akun tanpa unit mendapat 400.
+- Mapping field: saldo Juli (`saldoPokokJuli`/`saldoJasaJuli`/`totalSaldoJuli`), TL (`usulanTLTO2026`
+  → default → `tindakLanjutInventarisasiUP`), validasi 1/2, TO 2026, maps/alamat, folder PKS.
+  Progres TL: selesai = sudah hapus buku/lunas/selesai inventarisasi; berjalan = ada rencana TL;
+  belum = BUKAN TO 2026 / tanpa rencana.
+- Halaman `/pumk/monitoring`: filter unit untuk admin, kolom UNIT saat "Semua unit", detail modal
+  menampilkan unit/sektor/folder PKS, export Excel mengikuti scope.
+- Uji API **22/22 PASS**: admin 363 mitra (Bintaro 18, belum ditugaskan 96), KPI cocok dengan data,
+  mapping saldo/nama/unit/maps sesuai dokumen, user unit hanya unitnya (query unit lain diabaikan),
+  tanpa token 401. `tsc`, `eslint`, `next build` EXIT 0 (2 Nov).
 
 ## Sesi 26–28 Okt — target PUMK massal (`72177b9` + `9736300`)
 - Endpoint `POST /api/pumk-targets/bulk` (admin, satu transaksi Firestore, maks 17 unit):
@@ -53,8 +105,8 @@
   unit dinormalisasi (`UP2D Jakarta` → `UP2D`), role unit ditolak 403.
 - UI: tabel + cari/filter unit/kolektibilitas/status + pagination + export Excel; form tambah/edit
   lengkap; tombol buka folder PKS/piutang. Tidak ada tautan ke Google Sheet dari halaman ini.
-- Tautan **SPS Online/Google Sheet** di Monitoring PUMK + detail modal dihapus. Monitoring PUMK lama
-  masih membaca sheet di server; sumber database baru sudah internal (migrasi monitoring bisa menyusul).
+- Tautan **SPS Online/Google Sheet** di Monitoring PUMK + detail modal dihapus. Saat itu Monitoring PUMK
+  masih membaca sheet di server; **sudah dimigrasikan ke `pumk_database`** pada sesi 2 Nov di atas.
 - Uji API **12/12 PASS**: 401 tanpa token, 403 role unit, 200 admin_uid, 363 mitra + folder sample,
   normalisasi UP2D, create, duplikat 409, URL salah 400, patch, bentrok NO ID 409, GET terbaru,
   delete + total kembali 363. Data uji dibersihkan.
@@ -162,10 +214,12 @@
   daftar "Kegiatan tersimpan" + buka bukti bertoken.
 
 ## Sisa pekerjaan
-1. Buat PR → merge `72177b9` + `9736300` + `03089d6` + `08a0319` + `4e2eca5` + `1be99a2` + `6befdcc` + `60b2845`,
-   lalu uji klik UI target massal (banyak NO ID per unit, Semua unit + Pilih unit) dan Database PUMK di
-   production; pastikan menu **PUMK → Database PUMK** hanya tampil untuk Admin UID/super admin.
-2. Setelah merge/deploy: uji **Medsos → Rencana Postingan UP** dengan akun UID (tambah rencana +
+1. ~~Buat PR → merge~~ **selesai** (PR #20 + #21, master `d6ff9e5`, live di production). Sisa: deploy
+   perubahan Set Target ↔ Database PUMK, lalu uji klik UI target massal (Semua unit + Pilih unit),
+   picker mitra (pilih dari database, input manual NO ID+nama, NO ID asing ditolak, bentrok unit
+   ditolak) dan pastikan `unitId` di Database PUMK ikut berubah. Cek juga menu
+   **PUMK → Database PUMK** hanya tampil untuk Admin UID/super admin.
+2. Di production: uji **Medsos → Rencana Postingan UP** dengan akun UID (tambah rencana +
    upload gambar & video) dan akun unit (lihat/buka/unduh/salin caption,
    tanpa tombol tambah/edit/hapus). Cek juga tombol **Sync Sekarang** muncul di TL/staff/asman.
 3. Uji alur kunjungan dengan 3 akun: staff (buat draf), TL (edit + ajukan, tanpa tombol Setujui/Tolak),
@@ -174,8 +228,8 @@
    stakeholder realisasi) — kode sudah live via PR #18/#19.
 5. `stakeholder/review` + `evaluasi` masih MOCK → sambungkan ke API transisi yang ada.
 6. Halaman edit EVP agar eviden bisa diganti selama draf.
-7. Publish `firestore.rules` blok `pumk_targets` + `pumk_database` (Console); SMTP produksi; migrasi
-   Monitoring PUMK lama agar membaca `pumk_database` (bukan sheet); rekap agregat PUMK lintas unit.
+7. Publish `firestore.rules` blok `pumk_targets` + `pumk_database` (Console); SMTP produksi; rekap
+   agregat PUMK lintas unit.
 8. Keputusan tertunda: duplikat demo pakai data sama (A) atau Firebase project terpisah (B, rekomendasi);
    `NOTULENSI.md` restore atau hapus.
 
@@ -186,5 +240,8 @@
 - Restart service media (PowerShell admin): `schtasks /end /tn MediaStore; schtasks /run /tn MediaStore`
   (tanpa reboot PC; wajib setelah ubah `server.mjs`/`config.env`).
 - Chrome minta "Access other devices on your local network" (Funnel → `100.109.228.68`): pilih Allow.
+- Cek posisi Vercel tanpa CLI/token:
+  `Invoke-RestMethod "https://api.github.com/repos/WELLSAM16/UID/deployments?per_page=5"` (repo publik),
+  lalu probe route production (`/api/...` → 401/405 = route ada, `/api/zzz` → 404 = baseline).
 - Bandwidth PC bukan hambatan (~340 Mbps down, ~325 Mbps up paralel). Repo lama `D:\Magang2\Magang` BEKU;
-  Firebase aktif `offering-uid`; `master` lokal basi, acuan `origin/master`.
+  Firebase aktif `offering-uid`; `master` lokal basi, acuan `origin/master` (`d6ff9e5` per 2 Nov).

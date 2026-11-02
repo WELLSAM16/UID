@@ -11,6 +11,33 @@ import { UNIT_OPTIONS } from "@/lib/roles";
 import { validateMediaFile } from "@/lib/mediaShared";
 import { openMediaFile, uploadMediaFile } from "@/lib/mediaClient";
 
+/** Template form (docx) yang dapat diunduh user untuk mengisi laporan kunjungan. */
+const PUMK_FORM_TEMPLATE_FILES = [
+  "Form A PKS Tahap 1 Rescheduling_2026.docx",
+  "Form A PKS tahap 2 Reconditioning_2026.docx",
+  "Form B Pernyataan Ahli Waris_2026.docx",
+  "Form C Bencana_2026.docx",
+  "Form D Mitra Tidak Diketemukan_2026.docx",
+  "Form E Surat Pengakuan Hutang_2026.docx",
+  "Form F Pernyataan Validasi Mitra_2026.docx",
+  "Form G Pernyataan Gagal Bayar_2026.docx",
+  "Form H Pernyataan Kelebihan Bayar_2026.docx",
+  "Form I Pengembalian Dana_2026.docx",
+  "Form J Rekomendasi Pinjaman_2026.docx",
+  "Form K Evaluasi Kelayakan Program.docx",
+  "Form K Evaluasi Kelayakan Program_IDIR.docx",
+  "Form L Penghitungan Tenor Rescheduling_2026.docx",
+  "Form M Pakta Integritas Hapusbuku_2026.docx",
+  "Form N Pakta Integritas Hapusbuku_2026.docx",
+  "Form O Dokumentasi.docx",
+  "Form P Pelaporan.docx",
+];
+const PUMK_FORM_TEMPLATES = PUMK_FORM_TEMPLATE_FILES.map((file) => ({
+  file,
+  label: file.replace(/\.docx$/i, "").replace(/_/g, " "),
+  url: `/pumk-forms/${encodeURIComponent(file)}`,
+}));
+
 interface Visit {
   id: string;
   unitId: string;
@@ -526,6 +553,19 @@ export default function PumkKunjunganPage() {
       {canInput && (
         <section className="glass-panel" style={{ padding: "20px 24px", marginBottom: "24px" }}>
           <h2 style={{ margin: "0 0 16px 0", fontSize: "1.05rem", fontWeight: 700 }}>Tambah Laporan Kunjungan</h2>
+          <details style={{ marginBottom: "16px", padding: "10px 14px", borderRadius: "10px", background: "rgba(56,189,248,0.06)", border: "1px solid var(--card-border)" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "0.85rem", color: "var(--primary)" }}>
+              📄 Download template form (Form A–P) — klik untuk daftar
+            </summary>
+            <div style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "6px" }}>
+              {PUMK_FORM_TEMPLATES.map((t) => (
+                <a key={t.file} href={t.url} download target="_blank" rel="noopener noreferrer"
+                  style={{ padding: "6px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.6)", textDecoration: "none", color: "inherit", fontSize: "0.78rem", border: "1px solid var(--card-border)" }}>
+                  ⬇ {t.label}
+                </a>
+              ))}
+            </div>
+          </details>
           <div className="kunj-grid">
             <Field label="Tanggal kunjungan" span={3}>
               <input className="input-field" type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
@@ -572,7 +612,10 @@ export default function PumkKunjunganPage() {
                 </select>
               </Field>
               <Field label="File Form O (opsional)" span={6} hint={fileLabel(formOFile)}>
-                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFormOFile(e.target.files?.[0] || null)} />
+                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                  <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFormOFile(e.target.files?.[0] || null)} style={{ flex: 1, minWidth: 0 }} />
+                  <a href="/pumk-forms/Form%20O%20Dokumentasi_2026.docx" download target="_blank" rel="noopener noreferrer" className="btn" style={{ padding: "6px 10px", fontSize: "0.75rem", whiteSpace: "nowrap" }}>⬇ Template</a>
+                </div>
               </Field>
               <Field label="File dokumen lain (opsional)" span={6} hint={fileLabel(dokumenLainFile)}>
                 <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setDokumenLainFile(e.target.files?.[0] || null)} />
@@ -584,7 +627,10 @@ export default function PumkKunjunganPage() {
                 <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setBuktiBayarFile(e.target.files?.[0] || null)} />
               </Field>
               <Field label="File Form O (opsional)" span={6} hint={fileLabel(formOFile)}>
-                <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFormOFile(e.target.files?.[0] || null)} />
+                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                  <input className="input-field" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFormOFile(e.target.files?.[0] || null)} style={{ flex: 1, minWidth: 0 }} />
+                  <a href="/pumk-forms/Form%20O%20Dokumentasi_2026.docx" download target="_blank" rel="noopener noreferrer" className="btn" style={{ padding: "6px 10px", fontSize: "0.75rem", whiteSpace: "nowrap" }}>⬇ Template</a>
+                </div>
               </Field>
             </div>
           )}

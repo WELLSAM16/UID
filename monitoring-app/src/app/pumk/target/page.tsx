@@ -3,8 +3,16 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useRouter } from "next/navigation";
-import { PUMK_TARGET_UNITS, currentYear } from "@/lib/pumkTarget";
+import {
+  PUMK_TARGET_UNITS,
+  currentYear,
+  normalizeNoIdKey,
+  type PumkAssignedMitra,
+} from "@/lib/pumkTarget";
 import { formatUnitDisplay } from "@/lib/roles";
+import PumkMitraPicker, {
+  type PumkDbLookupItem,
+} from "@/components/PumkMitraPicker";
 
 interface PumkTarget {
   id: string;
@@ -14,6 +22,7 @@ interface PumkTarget {
   targetRupiahKembali: number;
   targetMitra: number;
   assignedNoIds?: string[];
+  assignedMitra?: PumkAssignedMitra[];
   status: "Active" | "Paused";
   updatedAt?: string;
 }
@@ -36,6 +45,8 @@ interface BulkRow {
   targetInventarisasi: string;
   targetRupiahKembali: string;
   assignedNoIds: string;
+  /** Daftar pernah diubah lewat picker/ketik; kosong berarti "hapus daftar". */
+  assignedTouched?: boolean;
 }
 
 function emptyBulkRow(unitId: string): BulkRow {
@@ -45,11 +56,14 @@ function emptyBulkRow(unitId: string): BulkRow {
     targetInventarisasi: "",
     targetRupiahKembali: "",
     assignedNoIds: "",
+    assignedTouched: false,
   };
 }
 
-const assignedCount = (s: string) =>
-  s.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean).length;
+const parseIds = (s: string) =>
+  s.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean);
+
+const assignedCount = (s: string) => parseIds(s).length;
 
 const EMPTY = {
   unitId: "UP3 BINTARO",
@@ -110,6 +124,12 @@ export default function PumkTargetPage() {
     tahun: "",
     targets: [],
   });
+  const [dbMitra, setDbMitra] = useState<PumkDbLookupItem[]>([]);
+  const [dbLoading, setDbLoading] = useState(false);
+  const [dbError, setDbError] = useState("");
+  const [picker, setPicker] = useState<
+    null | { mode: "single" } | { mode: "bulk"; unitId: string }
+  >(null);
 
   const isAdmin =
     user?.role === "administrator" ||
@@ -151,6 +171,27 @@ export default function PumkTargetPage() {
     return data;
   };
 
+  // Daftar mitra database internal, untuk picker + tampilan nama.
+  const loadDb = useCallback(async () => {
+    if (!isAdmin) return;
+    setDbLoading(true);
+    setDbError("");
+    try {
+      const res = await authFetch("/api/pumk/database/lookup");
+      const data = await parseJson(res);
+      setDbMitra((data.mitra as PumkDbLookupItem[]) || []);
+    } catch (e: unknown) {
+      setDbError(errMsg(e));
+    } finally {
+      setDbLoading(false);
+    }
+  }, [authFetch, isAdmin]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadDb();
+  }, [loadDb]);
+
   const load = useCallback(async () => {
     if (authLoading) return;
     if (!user) {
@@ -183,7 +224,7 @@ export default function PumkTargetPage() {
   // Saat mode massal dibuka, ambil target tahun tersebut untuk menandai
   // unit mana yang akan dibuat vs diperbarui.
   useEffect(() => {
-    if (!isModalOpen || scope === "single") return;
+    if (!isModalOpen) return;
     const t = formData.tahun.trim();
     if (!/^\d{4}$/.test(t)) return;
     let alive = true;
@@ -200,7 +241,7 @@ export default function PumkTargetPage() {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isModalOpen, scope, formData.tahun]);
+  }, [isModalOpen, formData.tahun]);
 
   const progress = useMemo(() => {
     const map = new Map<string, { inv: number; rupiah: number; mitra: Set<string> }>();
@@ -220,7 +261,7 @@ export default function PumkTargetPage() {
       if (!active) continue;
       const slot = map.get(active.id);
       if (!slot) continue;
-      if (v.jenisTindakLanjut === "Inventarisasi") slot.inv += 1;
+      if (v.jenisTindakLanjut === "Inventarisasi") slot.inv += Number(v.totalSaldo || 0);
       if (v.jenisTindakLanjut === "Penagihan") slot.rupiah += Number(v.totalSaldo || 0);
       if (v.noId) slot.mitra.add(String(v.noId).trim().toUpperCase());
     }
@@ -228,6 +269,7 @@ export default function PumkTargetPage() {
   }, [targets, visits, tahun]);
 
   const handleOpenModal = (target?: PumkTarget) => {
+    setPicker(null);
     if (target) {
       setEditTarget(target);
       setFormData({
@@ -271,6 +313,112 @@ export default function PumkTargetPage() {
     }
     return map;
   }, [existingYear, formData.tahun]);
+
+  /** Indeks NO ID → mitra database (hasil lookup). */
+  const dbByKey = useMemo(() => {
+    const map = new Map<string, PumkDbLookupItem>();
+    for (const m of dbMitra) {
+      const key = normalizeNoIdKey(m.noIdKey || m.noId);
+      if (key && !map.has(key)) map.set(key, m);
+    }
+    return map;
+  }, [dbMitra]);
+
+  const hasDb = dbMitra.length > 0;
+
+  const singleIds = parseIds(formData.assignedNoIds);
+  const singleUnknown = hasDb
+    ? singleIds.filter((id) => !dbByKey.has(normalizeNoIdKey(id)))
+    : [];
+
+  const namaFor = (noId: string, snapshot?: PumkAssignedMitra[]): string => {
+    const live = dbByKey.get(normalizeNoIdKey(noId))?.nama;
+    if (live) return live;
+    return (
+      (snapshot || []).find(
+        (s) => normalizeNoIdKey(s.noId) === normalizeNoIdKey(noId)
+      )?.nama || ""
+    );
+  };
+
+  /** Unit lain yang sudah memegang mitra pada tahun yang sedang diisi. */
+  const pickerClaimed = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!picker) return map;
+    const excluded =
+      picker.mode === "single" ? formData.unitId : picker.unitId;
+    const year = formData.tahun.trim();
+    if (existingYear.tahun === year) {
+      for (const t of existingYear.targets) {
+        if (t.unitId === excluded) continue;
+        for (const id of t.assignedNoIds || []) {
+          map.set(normalizeNoIdKey(id), t.unitId);
+        }
+      }
+    }
+    for (const r of bulkRows) {
+      if (r.unitId === excluded) continue;
+      for (const id of parseIds(r.assignedNoIds)) {
+        map.set(normalizeNoIdKey(id), r.unitId);
+      }
+    }
+    return map;
+  }, [picker, existingYear, formData.unitId, formData.tahun, bulkRows]);
+
+  const pickerSelected = useMemo(() => {
+    if (!picker) return [];
+    if (picker.mode === "single") return parseIds(formData.assignedNoIds);
+    const row = bulkRows.find((r) => r.unitId === picker.unitId);
+    const typed = row ? parseIds(row.assignedNoIds) : [];
+    if (typed.length > 0) return typed;
+    // Kolom kosong = daftar lama dipertahankan; tampilkan daftar lama
+    // sebagai pilihan awal agar bisa diedit.
+    return existingByUnit.get(picker.unitId)?.assignedNoIds || [];
+  }, [picker, formData.assignedNoIds, bulkRows, existingByUnit]);
+
+  const applyPicker = (ids: string[]) => {
+    if (!picker) return;
+    const joined = ids.join("\n");
+    if (picker.mode === "single") {
+      setFormData((prev) => {
+        const oldCount = assignedCount(prev.assignedNoIds);
+        const next = { ...prev, assignedNoIds: joined };
+        if (!prev.targetMitra.trim() || Number(prev.targetMitra) === oldCount) {
+          next.targetMitra = String(ids.length);
+        }
+        return next;
+      });
+    } else {
+      const unitId = picker.unitId;
+      setBulkRows((prev) =>
+        prev.map((r) => {
+          if (r.unitId !== unitId) return r;
+          const oldCount = assignedCount(r.assignedNoIds);
+          const next = { ...r, assignedNoIds: joined, assignedTouched: true };
+          if (!r.targetMitra.trim() || Number(r.targetMitra) === oldCount) {
+            next.targetMitra = String(ids.length);
+          }
+          return next;
+        })
+      );
+    }
+    setPicker(null);
+  };
+
+  const removeSingleId = (noId: string) => {
+    const key = normalizeNoIdKey(noId);
+    setFormData((prev) => {
+      const ids = parseIds(prev.assignedNoIds).filter(
+        (x) => normalizeNoIdKey(x) !== key
+      );
+      const oldCount = assignedCount(prev.assignedNoIds);
+      const next = { ...prev, assignedNoIds: ids.join("\n") };
+      if (!prev.targetMitra.trim() || Number(prev.targetMitra) === oldCount) {
+        next.targetMitra = String(ids.length);
+      }
+      return next;
+    });
+  };
 
   /** Samakan isi tabel bulk dengan daftar unit yang dipilih. */
   const syncBulkRows = (units: string[]) => {
@@ -322,7 +470,7 @@ export default function PumkTargetPage() {
         // Saat daftar NO ID ditempel, target mitra otomatis mengikuti
         // jumlahnya selama belum diubah manual.
         const oldCount = assignedCount(r.assignedNoIds);
-        const next = { ...r, assignedNoIds: value };
+        const next = { ...r, assignedNoIds: value, assignedTouched: true };
         if (!r.targetMitra.trim() || Number(r.targetMitra) === oldCount) {
           next.targetMitra = String(assignedCount(value));
         }
@@ -352,7 +500,20 @@ export default function PumkTargetPage() {
         assignedNoIds?: string;
       }> = [];
       for (const r of bulkRows) {
-        const idsCount = assignedCount(r.assignedNoIds);
+        const rowIds = parseIds(r.assignedNoIds);
+        const idsCount = rowIds.length;
+        if (hasDb) {
+          const unknown = rowIds.filter(
+            (id) => !dbByKey.has(normalizeNoIdKey(id))
+          );
+          if (unknown.length > 0) {
+            alert(
+              `${formatUnitDisplay(r.unitId)}: ${unknown.length} NO ID tidak ada di database PUMK ` +
+                `(${unknown.slice(0, 5).join(", ")}). Tambahkan dulu di menu Database PUMK.`
+            );
+            return;
+          }
+        }
         if (!r.targetInventarisasi.trim() || !r.targetRupiahKembali.trim()) {
           alert(
             `Lengkapi target inventarisasi dan rupiah untuk ${formatUnitDisplay(r.unitId)}.`
@@ -370,11 +531,11 @@ export default function PumkTargetPage() {
         const rupiah = Number(r.targetRupiahKembali);
         if (
           !Number.isInteger(mitra) || mitra < 0 ||
-          !Number.isInteger(inv) || inv < 0 ||
+          !Number.isFinite(inv) || inv < 0 ||
           !Number.isFinite(rupiah) || rupiah < 0
         ) {
           alert(
-            `Target ${formatUnitDisplay(r.unitId)} harus angka >= 0 (mitra & inventarisasi bilangan bulat).`
+            `Target ${formatUnitDisplay(r.unitId)} harus angka >= 0 (mitra bilangan bulat).`
           );
           return;
         }
@@ -383,8 +544,10 @@ export default function PumkTargetPage() {
           targetMitra: mitra,
           targetInventarisasi: inv,
           targetRupiahKembali: rupiah,
-          // Kolom kosong = pertahankan daftar lama (bila ada).
-          ...(r.assignedNoIds.trim() ? { assignedNoIds: r.assignedNoIds } : {}),
+          // Kolom kosong & belum disentuh = pertahankan daftar lama (bila ada).
+          ...(r.assignedNoIds.trim() || r.assignedTouched
+            ? { assignedNoIds: r.assignedNoIds }
+            : {}),
         });
       }
       setSaving(true);
@@ -405,9 +568,11 @@ export default function PumkTargetPage() {
         };
         alert(
           `Target ${formData.tahun} disimpan: ${s.created || 0} dibuat, ` +
-            `${s.updated || 0} diperbarui, ${s.skipped || 0} dilewati.`
+            `${s.updated || 0} diperbarui, ${s.skipped || 0} dilewati.` +
+            (data.warning ? `\n\n${String(data.warning)}` : "")
         );
         setIsModalOpen(false);
+        loadDb();
         const savedYear = formData.tahun.trim();
         if (savedYear !== tahun) setTahun(savedYear);
         else load();
@@ -419,7 +584,7 @@ export default function PumkTargetPage() {
       return;
     }
 
-    const inv = parseInt(formData.targetInventarisasi, 10);
+    const inv = Number(formData.targetInventarisasi);
     const rupiah = Number(formData.targetRupiahKembali);
     const mitra = parseInt(formData.targetMitra, 10);
     if (!formData.unitId || !formData.tahun) {
@@ -429,6 +594,18 @@ export default function PumkTargetPage() {
     if (isNaN(inv) || inv < 0 || isNaN(mitra) || mitra < 0 || isNaN(rupiah) || rupiah < 0) {
       alert("Target harus angka >= 0!");
       return;
+    }
+    if (hasDb) {
+      const unknown = parseIds(formData.assignedNoIds).filter(
+        (id) => !dbByKey.has(normalizeNoIdKey(id))
+      );
+      if (unknown.length > 0) {
+        alert(
+          `${unknown.length} NO ID tidak ada di database PUMK (${unknown.slice(0, 5).join(", ")}). ` +
+            "Tambahkan dulu di menu Database PUMK atau hapus dari daftar."
+        );
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -453,9 +630,11 @@ export default function PumkTargetPage() {
           body: JSON.stringify(payload),
         });
       }
-      await parseJson(res);
+      const data = await parseJson(res);
+      if (data.warning) alert(String(data.warning));
       setIsModalOpen(false);
       load();
+      loadDb();
     } catch (e: unknown) {
       alert("Gagal menyimpan: " + errMsg(e));
     } finally {
@@ -480,9 +659,10 @@ export default function PumkTargetPage() {
         <div>
           <h1 style={{ fontSize: "2.2rem", margin: 0, color: "#111" }}>Target PUMK per Unit</h1>
           <p style={{ margin: "5px 0 0 0", color: "#111", fontSize: "0.9rem" }}>
-            Admin UID membagi mitra ke tiap UP3/UP2D: isi daftar NO ID mitra yang menjadi tanggung jawab
-            unit tersebut, lalu target inventarisasi dan rupiahnya. Capaian dihitung dari kunjungan
-            <b> approved</b> tahun berjalan.
+            Admin UID membagi mitra ke tiap UP3/UP2D dengan memilih dari <b>Database PUMK</b> (bukan
+            input bebas), lalu mengisi target inventarisasi dan rupiahnya. NO ID yang tidak terdaftar
+            di database tidak bisa ditargetkan. Capaian dihitung dari kunjungan <b>approved</b> tahun
+            berjalan, dan unit penanggung jawab mitra ikut diperbarui di database.
           </p>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
@@ -514,7 +694,7 @@ export default function PumkTargetPage() {
               <tr>
                 <th>Unit</th>
                 <th>Target Mitra</th>
-                <th>Target Inventarisasi</th>
+                <th>Target Inventarisasi (Rp)</th>
                 <th>Target Rupiah Kembali</th>
                 <th>Daftar Mitra (UID)</th>
                 <th>Status</th>
@@ -540,7 +720,7 @@ export default function PumkTargetPage() {
                     <tr key={t.id}>
                       <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{formatUnitDisplay(t.unitId)}</td>
                       <td style={{ fontWeight: 600 }}>{t.targetMitra.toLocaleString("id-ID")}</td>
-                      <td style={{ fontWeight: 600 }}>{t.targetInventarisasi.toLocaleString("id-ID")}</td>
+                      <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{rp(t.targetInventarisasi)}</td>
                       <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{rp(t.targetRupiahKembali)}</td>
                       <td>
                         {ids.length === 0 ? (
@@ -575,7 +755,7 @@ export default function PumkTargetPage() {
                           </div>
                           <div>
                             <div style={{ marginBottom: "2px" }}>
-                              Inventarisasi: <b>{realInv.toLocaleString("id-ID")}/{t.targetInventarisasi.toLocaleString("id-ID")}</b>
+                              Inventarisasi: <b>{rp(realInv)} / {rp(t.targetInventarisasi)}</b>
                             </div>
                             <Bar value={pct(realInv, t.targetInventarisasi)} />
                           </div>
@@ -608,16 +788,27 @@ export default function PumkTargetPage() {
             </tbody>
           </table>
 
-          {showIds && (
-            <div style={{ marginTop: "12px", padding: "12px 16px", borderRadius: "10px", background: "rgba(56,189,248,0.07)", fontSize: "0.85rem" }}>
-              <b>Daftar NO ID mitra ditangani ({(targets.find((t) => t.id === showIds)?.assignedNoIds || []).length}):</b>
-              <div style={{ marginTop: "6px", display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                {(targets.find((t) => t.id === showIds)?.assignedNoIds || []).map((id) => (
-                  <span key={id} style={{ padding: "2px 8px", borderRadius: "999px", background: "rgba(0,0,0,0.06)", fontSize: "0.78rem" }}>{id}</span>
-                ))}
-              </div>
-            </div>
-          )}
+          {showIds &&
+            (() => {
+              const shown = targets.find((t) => t.id === showIds);
+              const ids = shown?.assignedNoIds || [];
+              return (
+                <div style={{ marginTop: "12px", padding: "12px 16px", borderRadius: "10px", background: "rgba(56,189,248,0.07)", fontSize: "0.85rem" }}>
+                  <b>Daftar mitra ditangani ({ids.length}):</b>
+                  <div style={{ marginTop: "6px", display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {ids.map((id) => {
+                      const nama = namaFor(id, shown?.assignedMitra);
+                      return (
+                        <span key={id} style={{ padding: "2px 8px", borderRadius: "999px", background: "rgba(0,0,0,0.06)", fontSize: "0.78rem" }}>
+                          {id}
+                          {nama ? ` — ${nama}` : ""}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
           {!isAdmin && (
             <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: "12px" }}>
@@ -651,7 +842,8 @@ export default function PumkTargetPage() {
                   : `Set Target ${bulkUnits.length} Unit`}
             </h2>
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: 0 }}>
-              Satu baris aktif per unit per tahun. Daftar mitra = NO ID dari SPS (kolom CASCADING UP), satu per baris.
+              Satu baris aktif per unit per tahun. Pilih mitra dari Database PUMK; hanya NO ID yang
+              terdaftar yang bisa ditargetkan. Satu mitra hanya untuk satu unit per tahun.
             </p>
             <form onSubmit={handleSubmit}>
               {!editTarget && (
@@ -762,12 +954,12 @@ export default function PumkTargetPage() {
                   </div>
 
                   <div style={{ marginBottom: "16px" }}>
-                    <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Target Inventarisasi* (mitra selesai)</label>
+                    <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Target Inventarisasi* (Rp)</label>
                     <input
                       type="number"
                       min={0}
                       className="input-field"
-                      placeholder="Cth: 25"
+                      placeholder="Cth: 250000000"
                       value={formData.targetInventarisasi}
                       onChange={(e) => setFormData({ ...formData, targetInventarisasi: e.target.value })}
                     />
@@ -787,16 +979,88 @@ export default function PumkTargetPage() {
 
                   <div style={{ marginBottom: "16px" }}>
                     <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>
-                      Daftar NO ID Mitra Ditangani (opsional, {assignedCount(formData.assignedNoIds)} terisi)
+                      Mitra Ditangani ({singleIds.length})
                     </label>
-                    <textarea
-                      className="input-field"
-                      rows={5}
-                      placeholder={"Satu NO ID per baris, cth:\n01-01-778/93\n01-01-207/00"}
-                      value={formData.assignedNoIds}
-                      onChange={(e) => setFormData({ ...formData, assignedNoIds: e.target.value })}
-                      style={{ width: "100%", resize: "vertical" }}
-                    />
+                    {singleIds.length === 0 ? (
+                      <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "8px" }}>
+                        Belum ada mitra dipilih.
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                        {singleIds.map((id) => {
+                          const nama = namaFor(id);
+                          const missing = hasDb && !dbByKey.has(normalizeNoIdKey(id));
+                          return (
+                            <span
+                              key={id}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                padding: "2px 6px 2px 8px",
+                                borderRadius: "999px",
+                                background: missing ? "rgba(239,68,68,0.14)" : "rgba(0,0,0,0.06)",
+                                color: missing ? "var(--danger)" : "inherit",
+                                fontSize: "0.78rem",
+                              }}
+                            >
+                              {id}
+                              {nama ? ` — ${nama}` : missing ? " (tidak ada di database)" : ""}
+                              <button
+                                type="button"
+                                onClick={() => removeSingleId(id)}
+                                style={{ border: "none", background: "transparent", cursor: "pointer", color: "inherit", fontWeight: 700, padding: "0 2px" }}
+                                aria-label={`Hapus ${id}`}
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ background: "#38bdf8", color: "white" }}
+                        onClick={() => setPicker({ mode: "single" })}
+                      >
+                        Pilih mitra dari database
+                      </button>
+                      <span style={{ fontSize: "0.78rem", color: dbError ? "var(--danger)" : "var(--text-muted)" }}>
+                        {dbLoading ? "Memuat database…" : dbError ? `Gagal memuat database: ${dbError}` : ""}
+                      </span>
+                    </div>
+                    {singleUnknown.length > 0 && (
+                      <div style={{ marginTop: "6px", fontSize: "0.78rem", color: "var(--danger)" }}>
+                        {singleUnknown.length} NO ID belum terdaftar di database PUMK:{" "}
+                        {singleUnknown.slice(0, 5).join(", ")}. Hapus atau daftarkan dulu.
+                      </div>
+                    )}
+                    <details style={{ marginTop: "8px" }}>
+                      <summary style={{ fontSize: "0.78rem", color: "var(--text-muted)", cursor: "pointer" }}>
+                        Tempel NO ID manual (opsional)
+                      </summary>
+                      <textarea
+                        className="input-field"
+                        rows={4}
+                        placeholder={"Satu NO ID per baris, cth:\n01-01-778/93\n01-01-207/00"}
+                        value={formData.assignedNoIds}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setFormData((prev) => {
+                            const oldCount = assignedCount(prev.assignedNoIds);
+                            const next = { ...prev, assignedNoIds: value };
+                            if (!prev.targetMitra.trim() || Number(prev.targetMitra) === oldCount) {
+                              next.targetMitra = String(assignedCount(value));
+                            }
+                            return next;
+                          });
+                        }}
+                        style={{ width: "100%", resize: "vertical", marginTop: "6px" }}
+                      />
+                    </details>
                   </div>
 
                   <div style={{ marginBottom: "30px" }}>
@@ -853,7 +1117,7 @@ export default function PumkTargetPage() {
                         type="number"
                         min={0}
                         className="input-field"
-                        placeholder="Target inventarisasi"
+                        placeholder="Target inventarisasi (Rp)"
                         value={quick.inventarisasi}
                         onChange={(e) => setQuick({ ...quick, inventarisasi: e.target.value })}
                       />
@@ -861,7 +1125,7 @@ export default function PumkTargetPage() {
                         type="number"
                         min={0}
                         className="input-field"
-                        placeholder="Target rupiah"
+                        placeholder="Target rupiah (Rp)"
                         value={quick.rupiah}
                         onChange={(e) => setQuick({ ...quick, rupiah: e.target.value })}
                       />
@@ -893,8 +1157,8 @@ export default function PumkTargetPage() {
                             Daftar NO ID Mitra
                           </th>
                           <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Mitra</th>
-                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Inventarisasi</th>
-                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Rupiah</th>
+                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Inventarisasi (Rp)</th>
+                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Rupiah Kembali (Rp)</th>
                           <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Status</th>
                         </tr>
                       </thead>
@@ -914,6 +1178,11 @@ export default function PumkTargetPage() {
                                 ? "#0284c7"
                                 : "var(--text-muted)"
                               : "var(--success)";
+                            const rowIds = parseIds(r.assignedNoIds);
+                            const rowUnknown = hasDb
+                              ? rowIds.filter((id) => !dbByKey.has(normalizeNoIdKey(id)))
+                              : [];
+                            const oldIds = existing?.assignedNoIds || [];
                             return (
                               <tr key={r.unitId}>
                                 <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{formatUnitDisplay(r.unitId)}</td>
@@ -927,8 +1196,24 @@ export default function PumkTargetPage() {
                                     onChange={(e) => updateBulkRow(r.unitId, "assignedNoIds", e.target.value)}
                                   />
                                   <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    {assignedCount(r.assignedNoIds)} NO ID
+                                    {rowIds.length} NO ID
+                                    {rowIds.length === 0 && oldIds.length > 0 && (
+                                      <span> · daftar lama {oldIds.length} dipertahankan</span>
+                                    )}
+                                    {rowUnknown.length > 0 && (
+                                      <span style={{ color: "var(--danger)" }}>
+                                        {" "}· {rowUnknown.length} belum di database
+                                      </span>
+                                    )}
                                   </div>
+                                  <button
+                                    type="button"
+                                    className="btn"
+                                    style={{ marginTop: "4px", padding: "3px 8px", fontSize: "0.72rem", background: "rgba(56,189,248,0.14)" }}
+                                    onClick={() => setPicker({ mode: "bulk", unitId: r.unitId })}
+                                  >
+                                    Pilih dari database
+                                  </button>
                                 </td>
                                 <td>
                                   <input
@@ -945,7 +1230,7 @@ export default function PumkTargetPage() {
                                     type="number"
                                     min={0}
                                     className="input-field"
-                                    style={{ width: "100px", textAlign: "right" }}
+                                    style={{ width: "150px", textAlign: "right" }}
                                     value={r.targetInventarisasi}
                                     onChange={(e) => updateBulkRow(r.unitId, "targetInventarisasi", e.target.value)}
                                   />
@@ -976,10 +1261,12 @@ export default function PumkTargetPage() {
                     Perbarui target yang sudah ada (jika tidak dicentang, unit yang sudah punya target dilewati)
                   </label>
                   <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: 0, marginBottom: "20px" }}>
-                    Tempel banyak NO ID mitra per unit (satu per baris atau pisahkan koma). Target mitra otomatis
-                    mengikuti jumlah NO ID selama belum diubah manual. Kolom kosong mempertahankan daftar lama;
-                    untuk menghapus daftar, edit unit tersebut. Tidak ada pembagian rata: setiap unit memegang
-                    mitra yang diinput untuk unit itu.
+                    Tempel banyak NO ID mitra per unit (satu per baris atau pisahkan koma), atau klik
+                    “Pilih dari database” untuk memilih sekaligus dengan nama mitra. Setiap NO ID wajib
+                    terdaftar di Database PUMK dan hanya boleh dipegang satu unit per tahun. Target mitra
+                    otomatis mengikuti jumlah NO ID selama belum diubah manual. Kolom kosong mempertahankan
+                    daftar lama; untuk menghapus daftar, gunakan picker lalu kosongkan pilihan.
+                    Unit penanggung jawab mitra di Database PUMK ikut diperbarui.
                   </p>
                 </>
               )}
@@ -995,6 +1282,25 @@ export default function PumkTargetPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {picker && (
+        <PumkMitraPicker
+          key={picker.mode === "single" ? "single" : `bulk-${picker.unitId}`}
+          title={
+            picker.mode === "single"
+              ? "Pilih Mitra Ditangani"
+              : `Pilih Mitra — ${formatUnitDisplay(picker.unitId)}`
+          }
+          unitId={picker.mode === "single" ? formData.unitId : picker.unitId}
+          items={dbMitra}
+          loading={dbLoading}
+          error={dbError}
+          initialSelected={pickerSelected}
+          claimedBy={pickerClaimed}
+          onClose={() => setPicker(null)}
+          onApply={applyPicker}
+        />
       )}
     </div>
   );

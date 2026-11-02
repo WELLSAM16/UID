@@ -5,8 +5,20 @@ import { normalizeUnitId } from "@/lib/roles";
 import {
   PUMK_TARGET_UNITS,
   normalizeAssignedNoIds,
+  normalizeNoIdKey,
   validatePumkTarget,
+  type PumkAssignedMitra,
 } from "@/lib/pumkTarget";
+import {
+  PumkAssignError,
+  describeNoIds,
+  readPumkDbIndexTx,
+  resolveAssignedMitra,
+  syncPumkDbUnits,
+  type PumkDbIndex,
+  type PumkDbIndexEntry,
+  type UnitAssignmentGroup,
+} from "@/lib/pumkTargetDb";
 
 const COLLECTION = "pumk_targets";
 
@@ -66,6 +78,10 @@ interface PlanItem {
  * - unit harus UP2D/UP3 (UID tidak boleh).
  * - maksimal 17 unit, tidak boleh duplikat.
  * - `assignedNoIds` boleh berisi banyak NO ID per unit (array/string).
+ * - setiap NO ID wajib ada di `pumk_database`; nama diambil dari database.
+ * - satu NO ID hanya boleh dipakai satu unit pada tahun yang sama.
+ * - `unitId` mitra di database ikut diset ke unit tersebut; mitra yang
+ *   dilepas dari daftar di-unassign bila unit database masih unit itu.
  * - bila sudah ada baris untuk unit+tahun: perbarui baris aktif (atau baris
  *   pertama) menjadi Active; `createdAt` dipertahankan. `assignedNoIds` diganti
  *   bila field itu dikirim, atau dipertahankan bila tidak dikirim.
@@ -149,9 +165,14 @@ export async function POST(request: NextRequest) {
   const db = getAdminDb();
   const now = new Date().toISOString();
   let plan: PlanItem[] = [];
+  let index: PumkDbIndex | null = null;
+  let syncGroups: UnitAssignmentGroup[] = [];
+  let assignedKeys = new Set<string>();
 
   try {
     await db.runTransaction(async (tx) => {
+      // Semua read sebelum write.
+      const dbIndex = await readPumkDbIndexTx(tx, db);
       // Satu query per tahun; koleksi target kecil (maks 17 baris/tahun).
       const snap = await tx.get(db.collection(COLLECTION).where("tahun", "==", tahun));
       const byUnit = new Map<string, Array<{ id: string; data: JsonObject }>>();
@@ -164,19 +185,110 @@ export async function POST(request: NextRequest) {
         byUnit.set(unit, list);
       }
 
-      const attempt: PlanItem[] = [];
+      // Tentukan aksi dulu (dipakai untuk menyusun klaim NO ID).
+      const actions = new Map<
+        string,
+        { chosen: { id: string; data: JsonObject } | null; action: PlanAction }
+      >();
       for (const it of items) {
         const list = byUnit.get(it.unitId) || [];
         const active = list.find((x) => x.data.status === "Active");
         const chosen = active || list[0] || null;
+        const action: PlanAction = chosen
+          ? overwrite
+            ? "updated"
+            : "skipped"
+          : "created";
+        actions.set(it.unitId, { chosen, action });
+      }
 
-        if (chosen && !overwrite) {
-          attempt.push({ unitId: it.unitId, action: "skipped", id: chosen.id });
+      const rewriteUnits = new Set(
+        items
+          .filter(
+            (it) =>
+              it.assignedNoIds !== undefined &&
+              actions.get(it.unitId)?.action !== "skipped"
+          )
+          .map((it) => it.unitId)
+      );
+
+      // Klaim dari baris aktif unit lain. Baris unit yang akan ditulis ulang
+      // dikeluarkan karena daftarnya diganti.
+      const claims = new Map<string, string>();
+      for (const d of snap.docs) {
+        const data = d.data() as JsonObject;
+        if (data.status !== "Active") continue;
+        const unit = String(data.unitId || "");
+        if (!unit || rewriteUnits.has(unit)) continue;
+        for (const raw of Array.isArray(data.assignedNoIds) ? data.assignedNoIds : []) {
+          claims.set(normalizeNoIdKey(raw), unit);
+        }
+      }
+
+      const attempt: PlanItem[] = [];
+      const groups: UnitAssignmentGroup[] = [];
+      const allAssignedKeys = new Set<string>();
+
+      for (const it of items) {
+        const { chosen, action } = actions.get(it.unitId)!;
+        if (action === "skipped") {
+          attempt.push({ unitId: it.unitId, action, id: chosen!.id });
           continue;
         }
 
+        let assigned: PumkAssignedMitra[] | undefined;
+        let assignedEntries: PumkDbIndexEntry[] = [];
+        let removedKeys: string[] = [];
+
+        if (it.assignedNoIds !== undefined) {
+          const resolved = resolveAssignedMitra(it.assignedNoIds, dbIndex);
+          if (resolved.unknown.length > 0) {
+            throw new PumkAssignError(400, {
+              error:
+                `${it.unitId}: ${resolved.unknown.length} NO ID tidak ada di database PUMK: ` +
+                `${describeNoIds(resolved.unknown)}. Tambahkan mitra tersebut di menu Database PUMK dulu.`,
+              unitId: it.unitId,
+              unknownNoIds: resolved.unknown,
+            });
+          }
+
+          const conflicts = resolved.assigned
+            .map((m) => ({
+              noId: m.noId,
+              unitId: claims.get(normalizeNoIdKey(m.noId)) || "",
+            }))
+            .filter((c) => c.unitId);
+          if (conflicts.length > 0) {
+            throw new PumkAssignError(409, {
+              error:
+                `${it.unitId}: ${conflicts.length} NO ID sudah ditargetkan ke unit lain tahun ${tahun}: ` +
+                conflicts
+                  .slice(0, 5)
+                  .map((c) => `${c.noId} (${c.unitId})`)
+                  .join(", "),
+              unitId: it.unitId,
+              conflicts,
+            });
+          }
+
+          assigned = resolved.assigned;
+          const canonicalIds = assigned.map((m) => m.noId);
+          assignedEntries = canonicalIds
+            .map((noId) => dbIndex.get(normalizeNoIdKey(noId)))
+            .filter((e): e is PumkDbIndexEntry => Boolean(e));
+          for (const entry of assignedEntries) allAssignedKeys.add(entry.noIdKey);
+          // Klaim untuk item berikutnya dalam request yang sama.
+          for (const entry of assignedEntries) claims.set(entry.noIdKey, it.unitId);
+
+          const oldKeys = chosen
+            ? normalizeAssignedNoIds(chosen.data.assignedNoIds).map(normalizeNoIdKey)
+            : [];
+          const newKeys = new Set(canonicalIds.map(normalizeNoIdKey));
+          removedKeys = oldKeys.filter((key) => !newKeys.has(key));
+        }
+
         if (chosen) {
-          attempt.push({ unitId: it.unitId, action: "updated", id: chosen.id });
+          attempt.push({ unitId: it.unitId, action, id: chosen.id });
           tx.set(
             db.collection(COLLECTION).doc(chosen.id),
             {
@@ -186,7 +298,7 @@ export async function POST(request: NextRequest) {
               targetInventarisasi: it.targetInventarisasi,
               targetRupiahKembali: it.targetRupiahKembali,
               ...(it.assignedNoIds !== undefined
-                ? { assignedNoIds: it.assignedNoIds }
+                ? { assignedNoIds: assigned!.map((m) => m.noId), assignedMitra: assigned }
                 : {}),
               status: "Active",
               updatedAt: now,
@@ -197,14 +309,15 @@ export async function POST(request: NextRequest) {
           );
         } else {
           const ref = db.collection(COLLECTION).doc();
-          attempt.push({ unitId: it.unitId, action: "created", id: ref.id });
+          attempt.push({ unitId: it.unitId, action, id: ref.id });
           tx.set(ref, {
             unitId: it.unitId,
             tahun,
             targetMitra: it.targetMitra,
             targetInventarisasi: it.targetInventarisasi,
             targetRupiahKembali: it.targetRupiahKembali,
-            assignedNoIds: it.assignedNoIds ?? [],
+            assignedNoIds: assigned ? assigned.map((m) => m.noId) : [],
+            assignedMitra: assigned ?? [],
             status: "Active",
             createdBy: u.uid,
             createdByEmail: u.email || null,
@@ -212,24 +325,22 @@ export async function POST(request: NextRequest) {
             updatedAt: now,
           });
         }
+
+        if (assigned) {
+          groups.push({ unitId: it.unitId, assigned: assignedEntries, removedKeys });
+        }
       }
+
+      index = dbIndex;
+      syncGroups = groups;
+      assignedKeys = allAssignedKeys;
       // Timpa hasil percobaan sebelumnya bila transaksi di-retry.
       plan = attempt;
     });
-
-    const count = (action: PlanAction) => plan.filter((p) => p.action === action).length;
-    return NextResponse.json({
-      ok: true,
-      tahun,
-      overwrite,
-      summary: {
-        created: count("created"),
-        updated: count("updated"),
-        skipped: count("skipped"),
-      },
-      results: plan,
-    });
   } catch (err: unknown) {
+    if (err instanceof PumkAssignError) {
+      return NextResponse.json(err.payload, { status: err.status });
+    }
     console.error("POST /api/pumk-targets/bulk error:", err);
     return NextResponse.json(
       {
@@ -239,4 +350,37 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  // Sinkronkan Unit Penanggung Jawab di database mitra (batch, di luar
+  // transaksi target agar tidak melewati batas 500 write).
+  let warning: string | undefined;
+  let dbSync: { assigned: number; cleared: number } | undefined;
+  if (index && syncGroups.length > 0) {
+    try {
+      dbSync = await syncPumkDbUnits(db, syncGroups, {
+        index,
+        assignedKeys,
+        uid: u.uid,
+        email: u.email,
+      });
+    } catch (err) {
+      console.error("POST /api/pumk-targets/bulk db sync error:", err);
+      warning = "Target tersimpan, tetapi unit di Database PUMK gagal diperbarui.";
+    }
+  }
+
+  const count = (action: PlanAction) => plan.filter((p) => p.action === action).length;
+  return NextResponse.json({
+    ok: true,
+    tahun,
+    overwrite,
+    summary: {
+      created: count("created"),
+      updated: count("updated"),
+      skipped: count("skipped"),
+    },
+    results: plan,
+    dbSync,
+    ...(warning ? { warning } : {}),
+  });
 }

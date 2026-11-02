@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/lib/authContext";
 import { useRouter } from "next/navigation";
-import type { PumkMitra, PumkKpi } from "@/lib/pumk";
-import { tlProgress } from "@/lib/pumk";
+import type { PumkKpi, PumkMitra } from "@/lib/pumkMonitoring";
+import { tlProgress } from "@/lib/pumkMonitoring";
+import { formatUnitDisplay } from "@/lib/roles";
 import PumkDetailModal from "@/components/PumkDetailModal";
 
 const rp = (n: number) =>
@@ -19,10 +20,27 @@ function kolColor(k: string): string {
   return "#3b82f6";
 }
 
+interface PumkMonitoringMeta {
+  source: string;
+  scope: "ALL" | "UNIT" | "UNASSIGNED";
+  unitId: string;
+  unitLabel: string;
+  isAdmin: boolean;
+  totalRows: number;
+  totalMitra: number;
+  fetchedAt: string;
+}
+
+interface PumkUnitOption {
+  unitId: string;
+  label: string;
+  count: number;
+}
+
 function MetricBox({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {
   return (
     <div className="glass-card" style={{
-      padding: "20px 24px", flex: 1, minWidth: "160px",
+      padding: "20px 24px", flex: "1 1 200px", minWidth: "200px",
       position: "relative", overflow: "hidden", borderLeft: `4px solid ${color}`,
     }}>
       <div style={{
@@ -33,10 +51,13 @@ function MetricBox({ label, value, sub, color }: { label: string; value: string;
       <div style={{ fontSize: "0.85rem", color: "#111", marginBottom: "8px", fontWeight: 500 }}>
         {label}
       </div>
-      <div style={{ fontSize: "clamp(1.2rem, 5.5vw, 1.7rem)", fontWeight: 700, color: "#111", overflowWrap: "anywhere" }}>
+      <div style={{
+        fontSize: "clamp(1rem, 3vw, 1.25rem)", fontWeight: 700, color: "#111",
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+      }}>
         {value}
       </div>
-      {sub && <div style={{ fontSize: "0.78rem", color: "#111", marginTop: "4px" }}>{sub}</div>}
+      {sub && <div style={{ fontSize: "0.78rem", color: "#111", marginTop: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</div>}
     </div>
   );
 }
@@ -46,6 +67,9 @@ export default function PumkMonitoringPage() {
   const router = useRouter();
   const [mitra, setMitra] = useState<PumkMitra[]>([]);
   const [kpi, setKpi] = useState<PumkKpi | null>(null);
+  const [meta, setMeta] = useState<PumkMonitoringMeta | null>(null);
+  const [units, setUnits] = useState<PumkUnitOption[]>([]);
+  const [unitScope, setUnitScope] = useState("");
 
   const [isLoaded, setIsLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -58,24 +82,40 @@ export default function PumkMonitoringPage() {
   const [fTO, setFTO] = useState("");
   const [selected, setSelected] = useState<PumkMitra | null>(null);
 
-  async function loadData(refresh = false) {
+  const isAdmin =
+    user?.role === "admin_uid" || user?.role === "administrator" || user?.role === "admin";
+
+  const loadData = useCallback(async (refresh = false) => {
+    if (!user) return;
     setLoading(true);
     setError(null);
     try {
+      const params = new URLSearchParams();
+      if (isAdmin && unitScope) params.set("unitId", unitScope);
+      if (refresh) params.set("refresh", "1");
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+
       let token = await getToken();
       const headers: HeadersInit = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      let res = await fetch(`/api/pumk${refresh ? "?refresh=1" : ""}`, { headers, cache: "no-store" });
+      let res = await fetch(`/api/pumk${suffix}`, { headers, cache: "no-store" });
       if (res.status === 401) {
         token = await getToken(true);
         if (token) {
           headers["Authorization"] = `Bearer ${token}`;
-          res = await fetch(`/api/pumk${refresh ? "?refresh=1" : ""}`, { headers, cache: "no-store" });
+          res = await fetch(`/api/pumk${suffix}`, { headers, cache: "no-store" });
         }
         if (res.status === 401) { router.replace("/login"); return; }
       }
       const text = await res.text();
-      let data: { error?: string; details?: string; mitra?: unknown; kpi?: unknown } = {};
+      let data: {
+        error?: string;
+        details?: string;
+        mitra?: unknown;
+        kpi?: unknown;
+        meta?: unknown;
+        units?: unknown;
+      } = {};
       try { data = text ? JSON.parse(text) : {}; }
       catch { throw new Error(`API ${res.status}: respons bukan JSON.`); }
       if (!res.ok || data.error) {
@@ -83,13 +123,15 @@ export default function PumkMonitoringPage() {
       }
       setMitra(Array.isArray(data.mitra) ? (data.mitra as PumkMitra[]) : []);
       setKpi((data.kpi as PumkKpi) || null);
+      setMeta((data.meta as PumkMonitoringMeta) || null);
+      setUnits(Array.isArray(data.units) ? (data.units as PumkUnitOption[]) : []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
       setIsLoaded(true);
     }
-  }
+  }, [user, getToken, router, isAdmin, unitScope]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -97,7 +139,7 @@ export default function PumkMonitoringPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user, getToken, router]);
+  }, [authLoading, user, unitScope]);
 
   const kolOptions = useMemo(() => [...new Set(mitra.map((m) => m.kolektibilitas).filter(Boolean))].sort(), [mitra]);
   const tlOptions = useMemo(() => [...new Set(mitra.map((m) => m.tindakLanjut).filter((t) => t && t !== "-"))].sort(), [mitra]);
@@ -116,6 +158,9 @@ export default function PumkMonitoringPage() {
   }, [mitra, q, fKol, fTL, fProg, fTO]);
 
   const filteredRp = filtered.reduce((s, m) => s + m.totalJul, 0);
+  const showUnitColumn = isAdmin && meta?.scope === "ALL";
+  const baseColumns = ["NO ID", "NAMA MITRA", "KOLEKTIBILITAS", "SALDO (JUL 2026)", "TINDAK LANJUT", "STATUS", "TO"];
+  const columns = showUnitColumn ? ["UNIT", ...baseColumns] : baseColumns;
 
   const exportExcel = () => {
     if (filtered.length === 0) { alert("Tidak ada data untuk diekspor!"); return; }
@@ -123,6 +168,7 @@ export default function PumkMonitoringPage() {
       No: i + 1,
       "NO ID": m.noId,
       "Nama Mitra": m.nama,
+      ...(showUnitColumn ? { Unit: m.unitId ? formatUnitDisplay(m.unitId) : "Belum ditugaskan" } : {}),
       Kolektibilitas: m.kolektibilitas,
       PKS: m.pks,
       "Saldo Pokok (Jul 2026)": m.pokokJul,
@@ -137,8 +183,9 @@ export default function PumkMonitoringPage() {
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "PUMK Bintaro");
-    XLSX.writeFile(wb, "PUMK_UP3_Bintaro.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "PUMK");
+    const scopeName = (meta?.unitLabel || "Semua Unit").replace(/[^A-Za-z0-9]+/g, "_");
+    XLSX.writeFile(wb, `PUMK_${scopeName}.xlsx`);
   };
 
   return (
@@ -147,10 +194,31 @@ export default function PumkMonitoringPage() {
         <div>
           <h1 style={{ fontSize: "2.2rem", margin: 0, color: "#111" }}>Monitoring PUMK</h1>
           <p style={{ margin: "5px 0 0 0", fontSize: "0.85rem", color: "#111" }}>
-            Sumber: database UID
+            Sumber: <b>Database PUMK internal</b>
+            {meta ? ` · ${meta.unitLabel} · ${meta.totalRows} mitra` : " · memuat…"}
           </p>
         </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+          {isAdmin ? (
+            <select
+              className="input-field"
+              value={unitScope}
+              onChange={(e) => setUnitScope(e.target.value)}
+              title="Pilih unit"
+              style={{ minWidth: "210px" }}
+            >
+              <option value="">Semua unit ({meta?.totalMitra ?? mitra.length})</option>
+              {units.map((u) => (
+                <option key={u.unitId || "__none__"} value={u.unitId || "__none__"}>
+                  {u.label} ({u.count})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span style={{ fontSize: "0.85rem", color: "#111", fontWeight: 600 }}>
+              Unit: {formatUnitDisplay(user?.unitId)}
+            </span>
+          )}
           <button className="btn" onClick={() => loadData(true)} disabled={loading}
             style={{ background: "#38bdf8", color: "white", padding: "8px 16px", fontSize: "0.9rem", border: "none", cursor: loading ? "wait" : "pointer" }}>
             {loading ? "Memuat…" : "Refresh"}
@@ -175,7 +243,7 @@ export default function PumkMonitoringPage() {
           <MetricBox label="Total Tunggakan" value={kpi ? rp(kpi.totalTunggakan) : "…"} sub="pokok + jasa (Jul 2026)" color="#38bdf8" />
           {kpi ? kpi.byKolektibilitas.map((b) => (
             <div key={b.name} className="glass-card" style={{
-              padding: "20px 24px", flex: 1, minWidth: "160px",
+              padding: "20px 24px", flex: "1 1 180px", minWidth: "180px",
               position: "relative", overflow: "hidden", borderLeft: `4px solid ${kolColor(b.name)}`,
             }}>
               <div style={{
@@ -186,10 +254,13 @@ export default function PumkMonitoringPage() {
               <div style={{ fontSize: "0.85rem", color: "#111", marginBottom: "8px", fontWeight: 500 }}>
                 {b.name}
               </div>
-              <div style={{ fontSize: "clamp(1.2rem, 5.5vw, 1.7rem)", fontWeight: 700, color: "#111", overflowWrap: "anywhere" }}>
+              <div style={{
+                fontSize: "clamp(1rem, 3vw, 1.25rem)", fontWeight: 700, color: "#111",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>
                 {b.count} mitra
               </div>
-              <div style={{ fontSize: "0.78rem", color: "#111", marginTop: "4px" }}>{rp(b.rupiah)}</div>
+              <div style={{ fontSize: "0.78rem", color: "#111", marginTop: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{rp(b.rupiah)}</div>
             </div>
           )) : (
             <MetricBox label="Komposisi" value="…" color="#38bdf8" />
@@ -263,24 +334,29 @@ export default function PumkMonitoringPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--card-border)" }}>
-                  {["NO ID", "NAMA MITRA", "KOLEKTIBILITAS", "SALDO (JUL 2026)", "TINDAK LANJUT", "STATUS", "TO"].map((col) => (
+                  {columns.map((col) => (
                     <th key={col} style={{ padding: "12px 16px", textAlign: "left", color: "var(--text-muted)", fontWeight: "bold", fontSize: "0.72rem", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>{col}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {!isLoaded || loading ? (
-                  <tr><td colSpan={7} style={{ textAlign: "center", padding: "48px", color: "var(--text-muted)" }}>Memuat data PUMK…</td></tr>
+                  <tr><td colSpan={columns.length} style={{ textAlign: "center", padding: "48px", color: "var(--text-muted)" }}>Memuat data PUMK…</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign: "center", padding: "48px", color: "var(--text-muted)" }}>Tidak ada mitra pada filter ini.</td></tr>
+                  <tr><td colSpan={columns.length} style={{ textAlign: "center", padding: "48px", color: "var(--text-muted)" }}>Tidak ada mitra pada filter ini.</td></tr>
                 ) : (
                   filtered.map((m) => {
                     const prog = tlProgress(m);
                     return (
-                      <tr key={m.noId} onClick={() => setSelected(m)} title="Klik untuk detail"
+                      <tr key={m.id || m.noId} onClick={() => setSelected(m)} title="Klik untuk detail"
                         style={{ borderBottom: "1px solid var(--card-border)", cursor: "pointer" }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(14,165,233,0.06)")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                        {showUnitColumn && (
+                          <td style={{ padding: "13px 16px", whiteSpace: "nowrap", fontSize: "0.8rem" }}>
+                            {m.unitId ? formatUnitDisplay(m.unitId) : <span style={{ color: "var(--text-muted)" }}>Belum ditugaskan</span>}
+                          </td>
+                        )}
                         <td style={{ padding: "13px 16px", whiteSpace: "nowrap", fontWeight: 600 }}>{m.noId}</td>
                         <td style={{ padding: "13px 16px", maxWidth: "260px" }}>
                           <div style={{ fontWeight: 500 }}>{m.nama}</div>

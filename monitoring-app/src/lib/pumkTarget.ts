@@ -7,7 +7,7 @@
  * client hanya baca (progress capaian vs target di /pumk/target).
  *
  * - targetMitra: jumlah mitra yang ditangani unit (cascading).
- * - targetInventarisasi: jumlah mitra selesai inventarisasi.
+ * - targetInventarisasi: rupiah target inventarisasi (Rp).
  * - targetRupiahKembali: rupiah kembali via Penagihan (approved).
  * - assignedNoIds: daftar NO ID mitra yang ditangani (opsional,
  *   cerminan kolom CASCADING UP 2026, satu No ID per baris di UI).
@@ -17,13 +17,19 @@ import { normalizeUnitId } from "./roles";
 
 export type PumkTargetStatus = "Active" | "Paused";
 
+/** Snapshot mitra yang ditetapkan ke unit (diambil dari `pumk_database`). */
+export interface PumkAssignedMitra {
+  noId: string;
+  nama: string;
+}
+
 export interface PumkTarget {
   id?: string;
   /** Unit pelaksana, cth "UP3 BINTARO", "UP2D" (bukan "UID"). */
   unitId: string;
   /** Tahun anggaran, "YYYY" cth "2026". */
   tahun: string;
-  /** Jumlah mitra selesai inventarisasi (kunjungan approved). */
+  /** Target rupiah inventarisasi (Rp) (sum totalSaldo kunjungan Inventarisasi approved). */
   targetInventarisasi: number;
   /** Rupiah kembali (sum totalSaldo kunjungan Penagihan approved). */
   targetRupiahKembali: number;
@@ -31,6 +37,8 @@ export interface PumkTarget {
   targetMitra: number;
   /** Daftar NO ID mitra yang ditangani (opsional). */
   assignedNoIds?: string[];
+  /** Nama mitra saat ditetapkan (snapshot dari `pumk_database`). */
+  assignedMitra?: PumkAssignedMitra[];
   status: PumkTargetStatus;
   createdBy?: string;
   createdByEmail?: string;
@@ -116,8 +124,8 @@ export function validatePumkTarget(input: {
     return { ok: false, error: "tahun harus 2020–2100" };
 
   const inv = Number(input.targetInventarisasi);
-  if (!Number.isFinite(inv) || !isInt(inv) || inv < 0 || inv > 100000)
-    return { ok: false, error: "targetInventarisasi harus bilangan bulat 0–100000" };
+  if (!Number.isFinite(inv) || inv < 0 || inv > 1000000000000)
+    return { ok: false, error: "targetInventarisasi harus angka >= 0" };
 
   const rupiah = Number(input.targetRupiahKembali);
   if (!Number.isFinite(rupiah) || rupiah < 0 || rupiah > 1000000000000)
@@ -147,6 +155,11 @@ export function validatePumkTarget(input: {
 /** Normalisasi daftar No ID (trim, buang kosong, dedup case-insensitive). */
 export function normalizeAssignedNoIds(input: unknown): string[] {
   return parseAssigned(input) || [];
+}
+
+/** Kunci pencocokan NO ID ke `pumk_database` (uppercase, trim). */
+export function normalizeNoIdKey(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
 }
 
 /** Kunci unik target aktif: satu baris Active per (unitId, tahun). */
