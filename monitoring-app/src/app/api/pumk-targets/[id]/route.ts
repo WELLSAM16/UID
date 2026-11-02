@@ -129,7 +129,7 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
       let patch: Record<string, unknown> = {
         unitId,
         tahun,
-        targetInventarisasi: Math.trunc(Number(merged.targetInventarisasi)),
+        targetInventarisasi: Number(merged.targetInventarisasi),
         targetRupiahKembali: Number(merged.targetRupiahKembali),
         targetMitra: Math.trunc(Number(merged.targetMitra)),
         status,

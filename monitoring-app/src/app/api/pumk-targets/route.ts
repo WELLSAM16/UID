@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
       doc = {
         unitId,
         tahun,
-        targetInventarisasi: Math.trunc(Number(body.targetInventarisasi)),
+        targetInventarisasi: Number(body.targetInventarisasi),
         targetRupiahKembali: Number(body.targetRupiahKembali),
         targetMitra: Math.trunc(Number(body.targetMitra)),
         assignedNoIds: canonicalIds,

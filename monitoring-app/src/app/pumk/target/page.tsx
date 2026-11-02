@@ -261,7 +261,7 @@ export default function PumkTargetPage() {
       if (!active) continue;
       const slot = map.get(active.id);
       if (!slot) continue;
-      if (v.jenisTindakLanjut === "Inventarisasi") slot.inv += 1;
+      if (v.jenisTindakLanjut === "Inventarisasi") slot.inv += Number(v.totalSaldo || 0);
       if (v.jenisTindakLanjut === "Penagihan") slot.rupiah += Number(v.totalSaldo || 0);
       if (v.noId) slot.mitra.add(String(v.noId).trim().toUpperCase());
     }
@@ -531,11 +531,11 @@ export default function PumkTargetPage() {
         const rupiah = Number(r.targetRupiahKembali);
         if (
           !Number.isInteger(mitra) || mitra < 0 ||
-          !Number.isInteger(inv) || inv < 0 ||
+          !Number.isFinite(inv) || inv < 0 ||
           !Number.isFinite(rupiah) || rupiah < 0
         ) {
           alert(
-            `Target ${formatUnitDisplay(r.unitId)} harus angka >= 0 (mitra & inventarisasi bilangan bulat).`
+            `Target ${formatUnitDisplay(r.unitId)} harus angka >= 0 (mitra bilangan bulat).`
           );
           return;
         }
@@ -584,7 +584,7 @@ export default function PumkTargetPage() {
       return;
     }
 
-    const inv = parseInt(formData.targetInventarisasi, 10);
+    const inv = Number(formData.targetInventarisasi);
     const rupiah = Number(formData.targetRupiahKembali);
     const mitra = parseInt(formData.targetMitra, 10);
     if (!formData.unitId || !formData.tahun) {
@@ -694,7 +694,7 @@ export default function PumkTargetPage() {
               <tr>
                 <th>Unit</th>
                 <th>Target Mitra</th>
-                <th>Target Inventarisasi</th>
+                <th>Target Inventarisasi (Rp)</th>
                 <th>Target Rupiah Kembali</th>
                 <th>Daftar Mitra (UID)</th>
                 <th>Status</th>
@@ -720,7 +720,7 @@ export default function PumkTargetPage() {
                     <tr key={t.id}>
                       <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{formatUnitDisplay(t.unitId)}</td>
                       <td style={{ fontWeight: 600 }}>{t.targetMitra.toLocaleString("id-ID")}</td>
-                      <td style={{ fontWeight: 600 }}>{t.targetInventarisasi.toLocaleString("id-ID")}</td>
+                      <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{rp(t.targetInventarisasi)}</td>
                       <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{rp(t.targetRupiahKembali)}</td>
                       <td>
                         {ids.length === 0 ? (
@@ -755,7 +755,7 @@ export default function PumkTargetPage() {
                           </div>
                           <div>
                             <div style={{ marginBottom: "2px" }}>
-                              Inventarisasi: <b>{realInv.toLocaleString("id-ID")}/{t.targetInventarisasi.toLocaleString("id-ID")}</b>
+                              Inventarisasi: <b>{rp(realInv)} / {rp(t.targetInventarisasi)}</b>
                             </div>
                             <Bar value={pct(realInv, t.targetInventarisasi)} />
                           </div>
@@ -954,12 +954,12 @@ export default function PumkTargetPage() {
                   </div>
 
                   <div style={{ marginBottom: "16px" }}>
-                    <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Target Inventarisasi* (mitra selesai)</label>
+                    <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem" }}>Target Inventarisasi* (Rp)</label>
                     <input
                       type="number"
                       min={0}
                       className="input-field"
-                      placeholder="Cth: 25"
+                      placeholder="Cth: 250000000"
                       value={formData.targetInventarisasi}
                       onChange={(e) => setFormData({ ...formData, targetInventarisasi: e.target.value })}
                     />
@@ -1117,7 +1117,7 @@ export default function PumkTargetPage() {
                         type="number"
                         min={0}
                         className="input-field"
-                        placeholder="Target inventarisasi"
+                        placeholder="Target inventarisasi (Rp)"
                         value={quick.inventarisasi}
                         onChange={(e) => setQuick({ ...quick, inventarisasi: e.target.value })}
                       />
@@ -1125,7 +1125,7 @@ export default function PumkTargetPage() {
                         type="number"
                         min={0}
                         className="input-field"
-                        placeholder="Target rupiah"
+                        placeholder="Target rupiah (Rp)"
                         value={quick.rupiah}
                         onChange={(e) => setQuick({ ...quick, rupiah: e.target.value })}
                       />
@@ -1157,8 +1157,8 @@ export default function PumkTargetPage() {
                             Daftar NO ID Mitra
                           </th>
                           <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Mitra</th>
-                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Inventarisasi</th>
-                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Rupiah</th>
+                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Inventarisasi (Rp)</th>
+                          <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Target Rupiah Kembali (Rp)</th>
                           <th style={{ position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>Status</th>
                         </tr>
                       </thead>
@@ -1230,7 +1230,7 @@ export default function PumkTargetPage() {
                                     type="number"
                                     min={0}
                                     className="input-field"
-                                    style={{ width: "100px", textAlign: "right" }}
+                                    style={{ width: "150px", textAlign: "right" }}
                                     value={r.targetInventarisasi}
                                     onChange={(e) => updateBulkRow(r.unitId, "targetInventarisasi", e.target.value)}
                                   />
