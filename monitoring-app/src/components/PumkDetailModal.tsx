@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import type { PumkMitra } from "@/lib/pumk";
-import { tlProgress } from "@/lib/pumk";
+import type { PumkMitra } from "@/lib/pumkMonitoring";
+import { tlProgress } from "@/lib/pumkMonitoring";
+import { formatUnitDisplay } from "@/lib/roles";
 
 const rp = (n: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n || 0);
@@ -66,6 +67,8 @@ export default function PumkDetailModal({
 
         <div style={{ marginTop: "12px" }}>
           <Row label="Alamat">{dash(mitra.alamat)}</Row>
+          <Row label="Unit">{mitra.unitId ? formatUnitDisplay(mitra.unitId) : "Belum ditugaskan"}</Row>
+          <Row label="Sektor usaha">{dash(mitra.sektorUsaha)}</Row>
           <Row label="Saldo Juli 2026">
             <b>{rp(mitra.totalJul)}</b>
             <span style={{ color: "var(--text-muted)" }}> (P {rp(mitra.pokokJul)} + J {rp(mitra.jasaJul)})</span>
@@ -91,6 +94,17 @@ export default function PumkDetailModal({
               style={{ background: "rgba(59,130,246,0.15)", padding: "9px 16px", fontSize: "0.85rem", textDecoration: "none" }}
             >
               📍 Maps
+            </a>
+          )}
+          {mitra.linkFolder && (
+            <a
+              href={mitra.linkFolder}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn"
+              style={{ background: "rgba(16,185,129,0.15)", padding: "9px 16px", fontSize: "0.85rem", textDecoration: "none" }}
+            >
+              Folder PKS
             </a>
           )}
           <button className="btn" onClick={onClose} style={{ padding: "9px 16px", marginLeft: "auto" }}>

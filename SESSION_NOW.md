@@ -50,6 +50,21 @@
   EXIT 0 (2 Nov).
 - **Belum**: uji klik/UX picker di browser setelah deploy.
 
+## Sesi 2 Nov — Monitoring PUMK pindah ke database internal
+- `/api/pumk` sekarang membaca `pumk_database` (Firestore), **bukan Google Sheet/gviz**. Reader sheet
+  `src/lib/pumk.ts` dihapus; helper baru `src/lib/pumkMonitoring.ts` (mapping, KPI, progres TL).
+- Scope unit: staff/TL/Asman hanya melihat unitnya sendiri; admin_uid/administrator melihat semua unit
+  + dropdown (`Semua unit`, per unit, `Belum ditugaskan`). Akun tanpa unit mendapat 400.
+- Mapping field: saldo Juli (`saldoPokokJuli`/`saldoJasaJuli`/`totalSaldoJuli`), TL (`usulanTLTO2026`
+  → default → `tindakLanjutInventarisasiUP`), validasi 1/2, TO 2026, maps/alamat, folder PKS.
+  Progres TL: selesai = sudah hapus buku/lunas/selesai inventarisasi; berjalan = ada rencana TL;
+  belum = BUKAN TO 2026 / tanpa rencana.
+- Halaman `/pumk/monitoring`: filter unit untuk admin, kolom UNIT saat "Semua unit", detail modal
+  menampilkan unit/sektor/folder PKS, export Excel mengikuti scope.
+- Uji API **22/22 PASS**: admin 363 mitra (Bintaro 18, belum ditugaskan 96), KPI cocok dengan data,
+  mapping saldo/nama/unit/maps sesuai dokumen, user unit hanya unitnya (query unit lain diabaikan),
+  tanpa token 401. `tsc`, `eslint`, `next build` EXIT 0 (2 Nov).
+
 ## Sesi 26–28 Okt — target PUMK massal (`72177b9` + `9736300`)
 - Endpoint `POST /api/pumk-targets/bulk` (admin, satu transaksi Firestore, maks 17 unit):
   upsert per `(unitId, tahun)`, `overwrite:false` untuk melewati target lama, unit UID ditolak,
@@ -86,8 +101,8 @@
   unit dinormalisasi (`UP2D Jakarta` → `UP2D`), role unit ditolak 403.
 - UI: tabel + cari/filter unit/kolektibilitas/status + pagination + export Excel; form tambah/edit
   lengkap; tombol buka folder PKS/piutang. Tidak ada tautan ke Google Sheet dari halaman ini.
-- Tautan **SPS Online/Google Sheet** di Monitoring PUMK + detail modal dihapus. Monitoring PUMK lama
-  masih membaca sheet di server; sumber database baru sudah internal (migrasi monitoring bisa menyusul).
+- Tautan **SPS Online/Google Sheet** di Monitoring PUMK + detail modal dihapus. Saat itu Monitoring PUMK
+  masih membaca sheet di server; **sudah dimigrasikan ke `pumk_database`** pada sesi 2 Nov di atas.
 - Uji API **12/12 PASS**: 401 tanpa token, 403 role unit, 200 admin_uid, 363 mitra + folder sample,
   normalisasi UP2D, create, duplikat 409, URL salah 400, patch, bentrok NO ID 409, GET terbaru,
   delete + total kembali 363. Data uji dibersihkan.
@@ -209,8 +224,8 @@
    stakeholder realisasi) — kode sudah live via PR #18/#19.
 5. `stakeholder/review` + `evaluasi` masih MOCK → sambungkan ke API transisi yang ada.
 6. Halaman edit EVP agar eviden bisa diganti selama draf.
-7. Publish `firestore.rules` blok `pumk_targets` + `pumk_database` (Console); SMTP produksi; migrasi
-   Monitoring PUMK lama agar membaca `pumk_database` (bukan sheet); rekap agregat PUMK lintas unit.
+7. Publish `firestore.rules` blok `pumk_targets` + `pumk_database` (Console); SMTP produksi; rekap
+   agregat PUMK lintas unit.
 8. Keputusan tertunda: duplikat demo pakai data sama (A) atau Firebase project terpisah (B, rekomendasi);
    `NOTULENSI.md` restore atau hapus.
 
